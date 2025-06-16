@@ -1,9 +1,12 @@
-import mongoose from 'mongoose'
+const mongoose = require('mongoose');
 
 const storySchema = new mongoose.Schema({
-  title: String,
-  author: String,
-  description: String,
-})
+  title: { type: String, required: true },
+  content: { type: String, required: true },
+  imageUrl: { type: String, required: true },
+  category: { type: String, default: 'General' },
+  author: { type: String, default: 'Unknown' },
+  createdAt: { type: Date, default: Date.now },
+});
 
-export default mongoose.model('Story', storySchema)
+module.exports = mongoose.model('Story', storySchema);

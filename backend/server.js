@@ -1,32 +1,58 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-const dotenv = require('dotenv');
-const storyRoutes = require('./routes/stories');
-const progressRoutes = require('./routes/progress');
-const authRoutes = require('./routes/auth');
-
-dotenv.config();
 
 const app = express();
+const PORT = process.env.PORT || 3000; // Use port 3000 or whatever is available
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json()); // For parsing application/json
 
-// Routes
-app.use('/api/stories', storyRoutes);
-app.use('/api/progress', progressRoutes);
-app.use('/api/auth', authRoutes);
 
-// MongoDB Connection
-mongoose.connect(process.env.MONGO_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-  .then(() => console.log('MongoDB connected'))
-  .catch(err => console.error('MongoDB connection error:', err));
+// const uri = "mongodb+srv://nemisruparel:jz3JP5rhmHev4zDs@cluster0.zgjr7rz.mongodb.net/";
+const uri = "mongodb+srv://nemisruparel:jz3JP5rhmHev4zDs@cluster0.zgjr7rz.mongodb.net/devtalesDatabase";
 
-// Start Server
-const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+mongoose.connect(uri)
+  .then(() => console.log("MongoDB connected"))
+  .catch(err => console.error("MongoDB connection error:", err));
+
+
+// Story Schema and Model
+const stories = new mongoose.Schema({
+  title: { type: String, required: true },
+  content: { type: String, required: true },
+  author: { type: String, required: true },
+  category: { type: String, required: true },
+  imageUrl: { type: String },
+  audioUrl: { type: String },
+  videoUrl: { type: String },
+}, { timestamps: true }); // `timestamps: true` adds createdAt and updatedAt fields automatically
+
+const Story = mongoose.model('Story', stories);
+
+// API Routes
+app.get('/api/stories', async (req, res) => {
+  try {
+    const stories = await Story.find({});
+    res.json(stories);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// You might want a route to fetch a single story by ID for detail views
+app.get('/api/stories/:id', async (req, res) => {
+  try {
+    const story = await Story.findById(req.params.id);
+    if (!story) return res.status(404).json({ message: 'Story not found' });
+    res.json(story);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Start the server
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});

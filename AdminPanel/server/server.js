@@ -10,7 +10,7 @@ const app = express();
 const PORT = 4000;
 
 // Hardcoded sensitive keys (replace with environment variables in production)
-const MONGODB_URI = 'mongodb+srv://nemisruparel07:devtales_7763@cluster0.zgjr7rz.mongodb.net/devtalesDatabase?retryWrites=true&w=majority';
+const MONGODB_URI = 'mongodb+srv://nemisruparel:ELK4zia2yGorsiEb@cluster0.zgjr7rz.mongodb.net/storyteller';
 const IMAGEKIT_PUBLIC_KEY = 'public_91WUYHoQ4XXJ7TIs7FCosvRXroM=';
 const IMAGEKIT_PRIVATE_KEY = 'private_uiNov/oTnpsySa+Bkj2VrCtx9U4=';
 const IMAGEKIT_URL_ENDPOINT = 'https://ik.imagekit.io/zjdsj3kph';

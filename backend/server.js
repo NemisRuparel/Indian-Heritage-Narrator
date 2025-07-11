@@ -461,7 +461,7 @@ app.delete('/api/stories/:storyId/comment/:commentId', ClerkExpressRequireAuth()
       return res.status(403).json({ error: 'Unauthorized: You can only delete your own comments.' });
     }
 
-    comment.remove();
+    story.comments.pull(commentId);
     await story.save();
 
     const populatedStory = await Story.findById(story._id)
@@ -569,6 +569,50 @@ app.put(
     }
   }
 );
+
+// Protected route: Delete user profile
+app.delete('/api/users/:clerkId', ClerkExpressRequireAuth(), syncUser, async (req, res) => {
+  try {
+    const { clerkId } = req.params;
+
+    // Ensure only the user can delete their own profile
+    if (req.user.clerkId !== clerkId) {
+      return res.status(403).json({ error: 'Unauthorized: You can only delete your own profile' });
+    }
+
+    // Find the user in MongoDB
+    const user = await User.findOne({ clerkId });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found in database' });
+    }
+
+    // Delete all stories authored by the user
+    await Story.deleteMany({ authorId: user._id });
+
+    // Remove user's likes, bookmarks, and comments from all stories
+    await Story.updateMany(
+      { $or: [{ likes: clerkId }, { bookmarks: clerkId }, { 'comments.userId': user._id }] },
+      {
+        $pull: {
+          likes: clerkId,
+          bookmarks: clerkId,
+          comments: { userId: user._id },
+        },
+      }
+    );
+
+    // Delete the user from MongoDB
+    await User.findOneAndDelete({ clerkId });
+
+    // Delete the user from Clerk
+    await global.Clerk.users.deleteUser(clerkId);
+
+    res.status(204).send();
+  } catch (err) {
+    console.error('Error deleting user profile:', err);
+    res.status(500).json({ error: 'Failed to delete profile: ' + err.message });
+  }
+});
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

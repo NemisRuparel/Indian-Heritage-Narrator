@@ -8,11 +8,31 @@ import {
   ScrollView,
   Animated,
   ActivityIndicator,
-  Image
+  Image,
+  KeyboardAvoidingView,
+  Platform
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSignUp, useSignIn, useOAuth } from '@clerk/clerk-expo';
 import { router } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
+
+// Color theme matching Home.tsx
+const Colors = {
+  background: '#0D0D0D',
+  cardBackground: '#1C1C1C',
+  primaryAccent: '#8B6F47',
+  secondaryAccent: '#6B4E31',
+  textPrimary: '#F5F5F5',
+  textSecondary: '#B0B0B0',
+  border: '#404040',
+  error: '#CF2A27',
+  success: '#00C4B4',
+  shadow: 'rgba(0,0,0,0.5)',
+  overlay: 'rgba(0,0,0,0.7)',
+  goldLight: '#C9A66B',
+  goldDark: '#5E4A2E',
+};
 
 export default function AuthScreen() {
   // State management for form inputs and UI
@@ -62,7 +82,7 @@ export default function AuthScreen() {
 
   // OTP input handlers
   const handleOtpChange = (text, index) => {
-    if (!/^\d*$/.test(text)) return; // Only allow digits
+    if (!/^\d*$/.test(text)) return;
     const newCode = [...verificationCode];
     newCode[index] = text;
     setVerificationCode(newCode);
@@ -81,7 +101,7 @@ export default function AuthScreen() {
     }
   };
 
-  // Main authentication handler
+  // Main authentication handler (same as before)
   const handleEmailAuth = async () => {
     if (isLoading) return;
     setIsLoading(true);
@@ -239,7 +259,7 @@ export default function AuthScreen() {
     }
   };
 
-  // Google OAuth handler
+  // Google OAuth handler (same as before)
   const handleGoogleSignIn = async () => {
     if (isLoading) return;
     setIsLoading(true);
@@ -321,242 +341,261 @@ export default function AuthScreen() {
   };
 
   return (
-    <View style={styles.outerContainer}>
-      {toast.visible && (
-        <Animated.View
-          style={[
-            styles.toastContainer,
-            { opacity: toastOpacity, backgroundColor: toast.type === 'success' ? '#4CAF50' : toast.type === 'info' ? '#2196F3' : '#F44336' },
-          ]}
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={{ flex: 1 }}
+    >
+      <LinearGradient
+        colors={[Colors.background, Colors.cardBackground]}
+        style={styles.outerContainer}
+      >
+        {toast.visible && (
+          <Animated.View
+            style={[
+              styles.toastContainer,
+              { 
+                opacity: toastOpacity,
+                backgroundColor: toast.type === 'success' ? Colors.success : toast.type === 'info' ? '#2196F3' : Colors.error 
+              },
+            ]}
+          >
+            <Text style={styles.toastText}>{toast.message}</Text>
+          </Animated.View>
+        )}
+        <ScrollView 
+          contentContainerStyle={styles.container} 
+          keyboardShouldPersistTaps="handled"
         >
-          <Text style={styles.toastText}>{toast.message}</Text>
-        </Animated.View>
-      )}
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <View style={styles.header}>
-          <Text style={styles.appTitle}>
-            {isForgotPassword ? 'Reset Password' : isSignIn ? 'Welcome Back' : 'Create Account'}
-          </Text>
-          <Text style={styles.subTitle}>
-            {isForgotPassword
-              ? 'Enter your email to reset your password'
-              : isSignIn
-              ? 'Sign in to continue your journey'
-              : 'Join us today'}
-          </Text>
-        </View>
+          <View style={styles.header}>
+            <Text style={styles.appTitle}>
+              {isForgotPassword ? 'Reset Password' : isSignIn ? 'Welcome Back' : 'Create Account'}
+            </Text>
+            <Text style={styles.subTitle}>
+              {isForgotPassword
+                ? 'Enter your email to reset your password'
+                : isSignIn
+                ? 'Sign in to continue your journey'
+                : 'Join us today'}
+            </Text>
+          </View>
 
-        <View style={styles.form}>
-          {!isSignIn && !showVerification && !showUsernamePrompt && !isForgotPassword && (
-            <TextInput
-              placeholder="Full Name"
-              style={styles.input}
-              placeholderTextColor="#666"
-              value={fullName}
-              onChangeText={setFullName}
-              autoCapitalize="words"
-            />
-          )}
-          {(!showVerification || (isForgotPassword && !showVerification)) && !showUsernamePrompt && (
-            <TextInput
-              placeholder="Email Address"
-              keyboardType="email-address"
-              style={styles.input}
-              placeholderTextColor="#666"
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-            />
-          )}
-          {!showVerification && !showUsernamePrompt && isSignIn && !isForgotPassword && (
-            <View style={styles.passwordContainer}>
+          <View style={styles.form}>
+            {!isSignIn && !showVerification && !showUsernamePrompt && !isForgotPassword && (
               <TextInput
-                placeholder="Password"
-                secureTextEntry={!showPassword}
-                style={[styles.input, { flex: 1, marginBottom: 0 }]}
-                placeholderTextColor="#666"
-                value={password}
-                onChangeText={setPassword}
+                placeholder="Full Name"
+                style={styles.input}
+                placeholderTextColor={Colors.textSecondary}
+                value={fullName}
+                onChangeText={setFullName}
+                autoCapitalize="words"
+              />
+            )}
+            {(!showVerification || (isForgotPassword && !showVerification)) && !showUsernamePrompt && (
+              <TextInput
+                placeholder="Email Address"
+                keyboardType="email-address"
+                style={styles.input}
+                placeholderTextColor={Colors.textSecondary}
+                value={email}
+                onChangeText={setEmail}
                 autoCapitalize="none"
               />
-              <TouchableOpacity style={styles.icon} onPress={() => setShowPassword(!showPassword)}>
-                <Ionicons name={showPassword ? 'eye-off' : 'eye'} size={24} color="#FF9933" />
-              </TouchableOpacity>
-            </View>
-          )}
-          {!isSignIn && !showVerification && !showUsernamePrompt && !isForgotPassword && (
-            <View style={styles.passwordContainer}>
-              <TextInput
-                placeholder="Password"
-                secureTextEntry={!showPassword}
-                style={[styles.input, { flex: 1, marginBottom: 0 }]}
-                placeholderTextColor="#666"
-                value={password}
-                onChangeText={setPassword}
-                autoCapitalize="none"
-              />
-              <TouchableOpacity style={styles.icon} onPress={() => setShowPassword(!showPassword)}>
-                <Ionicons name={showPassword ? 'eye-off' : 'eye'} size={24} color="#FF9933" />
-              </TouchableOpacity>
-            </View>
-          )}
-          {!isSignIn && !showVerification && !showUsernamePrompt && !isForgotPassword && (
-            <View style={styles.passwordContainer}>
-              <TextInput
-                placeholder="Confirm Password"
-                secureTextEntry={!showConfirm}
-                style={[styles.input, { flex: 1, marginBottom: 0 }]}
-                placeholderTextColor="#666"
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-                autoCapitalize="none"
-              />
-              <TouchableOpacity style={styles.icon} onPress={() => setShowConfirm(!showConfirm)}>
-                <Ionicons name={showConfirm ? 'eye-off' : 'eye'} size={24} color="#FF9933" />
-              </TouchableOpacity>
-            </View>
-          )}
-          {showVerification && (
-            <View style={styles.otpContainer}>
-              {verificationCode.map((digit, index) => (
+            )}
+            {!showVerification && !showUsernamePrompt && isSignIn && !isForgotPassword && (
+              <View style={styles.passwordContainer}>
                 <TextInput
-                  key={index}
-                  ref={(ref) => (inputRefs.current[index] = ref)}
-                  style={styles.otpInput}
-                  placeholder="0"
-                  placeholderTextColor="#666"
-                  value={digit}
-                  onChangeText={(text) => handleOtpChange(text, index)}
-                  onKeyPress={({ nativeEvent }) => {
-                    if (nativeEvent.key === 'Backspace' && !digit && index > 0) {
-                      inputRefs.current[index - 1].focus();
-                    }
-                  }}
-                  keyboardType="numeric"
-                  maxLength={1}
-                  textAlign="center"
+                  placeholder="Password"
+                  secureTextEntry={!showPassword}
+                  style={[styles.input, { flex: 1, marginBottom: 0 }]}
+                  placeholderTextColor={Colors.textSecondary}
+                  value={password}
+                  onChangeText={setPassword}
                   autoCapitalize="none"
                 />
-              ))}
-            </View>
-          )}
-          {isForgotPassword && showVerification && (
-            <View style={styles.passwordContainer}>
-              <TextInput
-                placeholder="New Password"
-                secureTextEntry={!showResetPassword}
-                style={[styles.input, { flex: 1, marginBottom: 0 }]}
-                placeholderTextColor="#666"
-                value={resetPassword}
-                onChangeText={setResetPassword}
-                autoCapitalize="none"
-              />
-              <TouchableOpacity style={styles.icon} onPress={() => setShowResetPassword(!showResetPassword)}>
-                <Ionicons name={showResetPassword ? 'eye-off' : 'eye'} size={24} color="#FF9933" />
-              </TouchableOpacity>
-            </View>
-          )}
-          {isForgotPassword && showVerification && (
-            <View style={styles.passwordContainer}>
-              <TextInput
-                placeholder="Confirm New Password"
-                secureTextEntry={!showResetConfirm}
-                style={[styles.input, { flex: 1, marginBottom: 0 }]}
-                placeholderTextColor="#666"
-                value={resetConfirmPassword}
-                onChangeText={setResetConfirmPassword}
-                autoCapitalize="none"
-              />
-              <TouchableOpacity style={styles.icon} onPress={() => setShowResetConfirm(!showResetConfirm)}>
-                <Ionicons name={showResetConfirm ? 'eye-off' : 'eye'} size={24} color="#FF9933" />
-              </TouchableOpacity>
-            </View>
-          )}
-          {showUsernamePrompt && (
-            <TextInput
-              placeholder="Username"
-              style={styles.input}
-              placeholderTextColor="#666"
-              value={username}
-              onChangeText={setUsername}
-              autoCapitalize="none"
-            />
-          )}
-          <TouchableOpacity
-            style={[styles.primaryButton, isLoading && styles.disabledButton]}
-            onPress={showUsernamePrompt ? handleGoogleSignIn : handleEmailAuth}
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <ActivityIndicator size="small" color="#000" />
-            ) : (
-              <Text style={styles.primaryButtonText}>
-                {isForgotPassword
-                  ? showVerification
-                    ? 'Reset Password'
-                    : 'Send Reset Email'
-                  : isSignIn
-                  ? 'Sign In'
-                  : showVerification
-                  ? 'Verify Code'
-                  : showUsernamePrompt
-                  ? 'Complete Sign Up'
-                  : 'Sign Up'}
-              </Text>
-            )}
-          </TouchableOpacity>
-          {!showVerification && !showUsernamePrompt && isSignIn && !isForgotPassword && (
-            <TouchableOpacity onPress={handleForgotPassword} disabled={isLoading}>
-              <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-            </TouchableOpacity>
-          )}
-          {!showVerification && !showUsernamePrompt && !isForgotPassword && (
-            <>
-              <View style={styles.dividerContainer}>
-                <View style={styles.divider} />
-                <Text style={styles.or}>OR</Text>
-                <View style={styles.divider} />
+                <TouchableOpacity style={styles.icon} onPress={() => setShowPassword(!showPassword)}>
+                  <Ionicons name={showPassword ? 'eye-off' : 'eye'} size={24} color={Colors.primaryAccent} />
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity
-  style={[styles.googleButton, isLoading && styles.disabledButton]}
-  onPress={handleGoogleSignIn}
-  disabled={isLoading}
->
-  <Image
-    source={{ uri: 'https://crystalpng.com/wp-content/uploads/2025/05/google-logo.png' }}
-    style={styles.googleImage}
-  />
-  <Text style={styles.googleText}>Continue with Google</Text>
-</TouchableOpacity>
-              <TouchableOpacity onPress={() => setIsSignIn(!isSignIn)} disabled={isLoading}>
-                <Text style={styles.switchText}>
-                  {isSignIn ? "Don't have an account? " : 'Already have an account? '}
-                  <Text style={styles.switchAction}>{isSignIn ? 'Sign Up' : 'Sign In'}</Text>
-                </Text>
-              </TouchableOpacity>
-            </>
-          )}
-          {isForgotPassword && (
-            <TouchableOpacity onPress={handleBackToSignIn} disabled={isLoading}>
-              <Text style={styles.switchText}>Back to Sign In</Text>
+            )}
+            {!isSignIn && !showVerification && !showUsernamePrompt && !isForgotPassword && (
+              <View style={styles.passwordContainer}>
+                <TextInput
+                  placeholder="Password"
+                  secureTextEntry={!showPassword}
+                  style={[styles.input, { flex: 1, marginBottom: 0 }]}
+                  placeholderTextColor={Colors.textSecondary}
+                  value={password}
+                  onChangeText={setPassword}
+                  autoCapitalize="none"
+                />
+                <TouchableOpacity style={styles.icon} onPress={() => setShowPassword(!showPassword)}>
+                  <Ionicons name={showPassword ? 'eye-off' : 'eye'} size={24} color={Colors.primaryAccent} />
+                </TouchableOpacity>
+              </View>
+            )}
+            {!isSignIn && !showVerification && !showUsernamePrompt && !isForgotPassword && (
+              <View style={styles.passwordContainer}>
+                <TextInput
+                  placeholder="Confirm Password"
+                  secureTextEntry={!showConfirm}
+                  style={[styles.input, { flex: 1, marginBottom: 0 }]}
+                  placeholderTextColor={Colors.textSecondary}
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  autoCapitalize="none"
+                />
+                <TouchableOpacity style={styles.icon} onPress={() => setShowConfirm(!showConfirm)}>
+                  <Ionicons name={showConfirm ? 'eye-off' : 'eye'} size={24} color={Colors.primaryAccent} />
+                </TouchableOpacity>
+              </View>
+            )}
+            {showVerification && (
+              <View style={styles.otpContainer}>
+                {verificationCode.map((digit, index) => (
+                  <TextInput
+                    key={index}
+                    ref={(ref) => (inputRefs.current[index] = ref)}
+                    style={styles.otpInput}
+                    placeholder="0"
+                    placeholderTextColor={Colors.textSecondary}
+                    value={digit}
+                    onChangeText={(text) => handleOtpChange(text, index)}
+                    onKeyPress={({ nativeEvent }) => {
+                      if (nativeEvent.key === 'Backspace' && !digit && index > 0) {
+                        inputRefs.current[index - 1].focus();
+                      }
+                    }}
+                    keyboardType="numeric"
+                    maxLength={1}
+                    textAlign="center"
+                    autoCapitalize="none"
+                  />
+                ))}
+              </View>
+            )}
+            {isForgotPassword && showVerification && (
+              <View style={styles.passwordContainer}>
+                <TextInput
+                  placeholder="New Password"
+                  secureTextEntry={!showResetPassword}
+                  style={[styles.input, { flex: 1, marginBottom: 0 }]}
+                  placeholderTextColor={Colors.textSecondary}
+                  value={resetPassword}
+                  onChangeText={setResetPassword}
+                  autoCapitalize="none"
+                />
+                <TouchableOpacity style={styles.icon} onPress={() => setShowResetPassword(!showResetPassword)}>
+                  <Ionicons name={showResetPassword ? 'eye-off' : 'eye'} size={24} color={Colors.primaryAccent} />
+                </TouchableOpacity>
+              </View>
+            )}
+            {isForgotPassword && showVerification && (
+              <View style={styles.passwordContainer}>
+                <TextInput
+                  placeholder="Confirm New Password"
+                  secureTextEntry={!showResetConfirm}
+                  style={[styles.input, { flex: 1, marginBottom: 0 }]}
+                  placeholderTextColor={Colors.textSecondary}
+                  value={resetConfirmPassword}
+                  onChangeText={setResetConfirmPassword}
+                  autoCapitalize="none"
+                />
+                <TouchableOpacity style={styles.icon} onPress={() => setShowResetConfirm(!showResetConfirm)}>
+                  <Ionicons name={showResetConfirm ? 'eye-off' : 'eye'} size={24} color={Colors.primaryAccent} />
+                </TouchableOpacity>
+              </View>
+            )}
+            {showUsernamePrompt && (
+              <TextInput
+                placeholder="Username"
+                style={styles.input}
+                placeholderTextColor={Colors.textSecondary}
+                value={username}
+                onChangeText={setUsername}
+                autoCapitalize="none"
+              />
+            )}
+            <TouchableOpacity
+              style={[styles.primaryButton, isLoading && styles.disabledButton]}
+              onPress={showUsernamePrompt ? handleGoogleSignIn : handleEmailAuth}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <ActivityIndicator size="small" color={Colors.textPrimary} />
+              ) : (
+                <LinearGradient
+                  colors={[Colors.primaryAccent, Colors.goldDark]}
+                  style={styles.primaryButtonGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                >
+                  <Text style={styles.primaryButtonText}>
+                    {isForgotPassword
+                      ? showVerification
+                        ? 'Reset Password'
+                        : 'Send Reset Email'
+                      : isSignIn
+                      ? 'Sign In'
+                      : showVerification
+                      ? 'Verify Code'
+                      : showUsernamePrompt
+                      ? 'Complete Sign Up'
+                      : 'Sign Up'}
+                  </Text>
+                </LinearGradient>
+              )}
             </TouchableOpacity>
-          )}
-        </View>
-      </ScrollView>
-    </View>
+            {!showVerification && !showUsernamePrompt && isSignIn && !isForgotPassword && (
+              <TouchableOpacity onPress={handleForgotPassword} disabled={isLoading}>
+                <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+              </TouchableOpacity>
+            )}
+            {!showVerification && !showUsernamePrompt && !isForgotPassword && (
+              <>
+                <View style={styles.dividerContainer}>
+                  <View style={styles.divider} />
+                  <Text style={styles.or}>OR</Text>
+                  <View style={styles.divider} />
+                </View>
+                <TouchableOpacity
+                  style={[styles.googleButton, isLoading && styles.disabledButton]}
+                  onPress={handleGoogleSignIn}
+                  disabled={isLoading}
+                >
+                  <Image
+                    source={{ uri: 'https://crystalpng.com/wp-content/uploads/2025/05/google-logo.png' }}
+                    style={styles.googleImage}
+                  />
+                  <Text style={styles.googleText}>Continue with Google</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setIsSignIn(!isSignIn)} disabled={isLoading}>
+                  <Text style={styles.switchText}>
+                    {isSignIn ? "Don't have an account? " : 'Already have an account? '}
+                    <Text style={styles.switchAction}>{isSignIn ? 'Sign Up' : 'Sign In'}</Text>
+                  </Text>
+                </TouchableOpacity>
+              </>
+            )}
+            {isForgotPassword && (
+              <TouchableOpacity onPress={handleBackToSignIn} disabled={isLoading}>
+                <Text style={styles.switchText}>Back to Sign In</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </ScrollView>
+      </LinearGradient>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   outerContainer: {
     flex: 1,
-    backgroundColor: '#000',
     position: 'relative',
   },
   container: {
     flexGrow: 1,
-    backgroundColor: '#000',
-    paddingVertical: 60,
+    paddingVertical: 40,
     paddingHorizontal: 30,
     alignItems: 'center',
     justifyContent: 'center',
@@ -566,14 +605,14 @@ const styles = StyleSheet.create({
     marginBottom: 40,
   },
   appTitle: {
-    color: '#FF9933',
+    color: Colors.primaryAccent,
     fontSize: 32,
     fontWeight: '700',
     textAlign: 'center',
     letterSpacing: 1,
   },
   subTitle: {
-    color: '#CCC',
+    color: Colors.textSecondary,
     fontSize: 16,
     marginTop: 10,
     textAlign: 'center',
@@ -583,23 +622,24 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   input: {
-    backgroundColor: '#1a1a1a',
+    backgroundColor: Colors.cardBackground,
     borderRadius: 12,
     paddingVertical: 16,
     paddingHorizontal: 20,
-    color: '#fff',
+    color: Colors.textPrimary,
     marginBottom: 20,
     fontSize: 16,
     borderWidth: 1,
-    borderColor: '#1A1A1A',
+    borderColor: Colors.border,
   },
   passwordContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1A1A1A',
+    backgroundColor: Colors.cardBackground,
     borderRadius: 12,
     marginBottom: 20,
     borderWidth: 1,
+    borderColor: Colors.border,
   },
   icon: {
     paddingHorizontal: 12,
@@ -610,37 +650,33 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   otpInput: {
-    backgroundColor: '#1a1a1a',
+    backgroundColor: Colors.cardBackground,
     borderRadius: 8,
     width: 40,
     height: 50,
     textAlign: 'center',
-    color: '#fff',
+    color: Colors.textPrimary,
     fontSize: 18,
     borderWidth: 1,
-    borderColor: '#1A1A1A',
+    borderColor: Colors.border,
   },
   primaryButton: {
-    backgroundColor: '#FF9933',
-    paddingVertical: 16,
     borderRadius: 12,
     marginBottom: 30,
-    shadowColor: '#FF9933',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
+    overflow: 'hidden',
+  },
+  primaryButtonGradient: {
+    paddingVertical: 16,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   disabledButton: {
-    backgroundColor: '#FF9933',
     opacity: 0.5,
   },
   primaryButtonText: {
-    color: '#000',
+    color: Colors.textPrimary,
     fontSize: 18,
     fontWeight: '700',
-    textAlign: 'center',
   },
   dividerContainer: {
     flexDirection: 'row',
@@ -650,18 +686,18 @@ const styles = StyleSheet.create({
   divider: {
     flex: 1,
     height: 1,
-    backgroundColor: '#FF9933',
+    backgroundColor: Colors.border,
   },
   or: {
     textAlign: 'center',
-    color: '#FF9933',
+    color: Colors.textSecondary,
     marginHorizontal: 15,
     fontSize: 16,
     fontWeight: '600',
   },
   googleButton: {
     flexDirection: 'row',
-    backgroundColor: '#fff',
+    backgroundColor: Colors.cardBackground,
     borderRadius: 12,
     paddingVertical: 16,
     paddingHorizontal: 20,
@@ -669,29 +705,30 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 30,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: Colors.border,
   },
   googleText: {
-    color: '#000',
+    color: Colors.textPrimary,
     fontSize: 16,
     fontWeight: '600',
   },
   googleImage: {
     width: 24,
     height: 24,
-    marginRight: 5,
+    marginRight: 10,
   },
   switchText: {
-    color: '#FF9933',
+    color: Colors.textSecondary,
     fontSize: 16,
     textAlign: 'center',
   },
   switchAction: {
     fontWeight: '700',
+    color: Colors.primaryAccent,
     textDecorationLine: 'underline',
   },
   forgotPasswordText: {
-    color: '#FF9933',
+    color: Colors.primaryAccent,
     fontSize: 16,
     textAlign: 'center',
     marginBottom: 20,
@@ -707,7 +744,7 @@ const styles = StyleSheet.create({
     zIndex: 1000,
   },
   toastText: {
-    color: '#fff',
+    color: Colors.textPrimary,
     fontSize: 16,
     fontWeight: '500',
     textAlign: 'center',

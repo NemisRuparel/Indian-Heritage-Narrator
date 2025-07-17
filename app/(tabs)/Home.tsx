@@ -1,4 +1,4 @@
-import {useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,8 @@ import {
   Alert,
   Platform,
   StatusBar,
+  Pressable,
+  KeyboardAvoidingView
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser, useAuth } from '@clerk/clerk-expo';
@@ -23,9 +25,11 @@ import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Picker } from '@react-native-picker/picker';
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import { router } from 'expo-router';
 
-const API_URL = 'http://192.168.126.65:3000';
-const { width: screenWidth } = Dimensions.get('window');
+const API_URL = 'https://devtalesbackend-1jbk.onrender.com';
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 const Categories = [
   'Mythology',
@@ -50,6 +54,9 @@ const Colors = {
   success: '#00C4B4',
   shadow: 'rgba(0,0,0,0.5)',
   like: '#ff0770',
+  overlay: 'rgba(0,0,0,0.7)',
+  goldLight: '#C9A66B',
+  goldDark: '#5E4A2E',
 };
 
 const Fonts = {
@@ -59,10 +66,12 @@ const Fonts = {
   button: Platform.OS === 'ios' ? 'Inter-Bold' : 'sans-serif',
 };
 
-const App = () => {
+const App = ({ navigation }) => {
   const [activeTab, setActiveTab] = useState('home');
   const [selectedStory, setSelectedStory] = useState(null);
-  const animatedValues:any = useRef({});
+  const animatedValues = useRef({}).current;
+  const [profileMenuVisible, setProfileMenuVisible] = useState(false);
+
   type Story = {
     _id: string;
     title: string;
@@ -90,7 +99,9 @@ const App = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  type ImageAsset = { uri: string; fileName?: string; [key: string]: any } | null;
+
+  type ImageAsset = { uri: string; fileName?: string;[key: string]: any } | null;
+
   const [newStory, setNewStory] = useState<{
     title: string;
     content: string;
@@ -102,17 +113,19 @@ const App = () => {
     category: Categories[0],
     image: null,
   });
+
   const [editStory, setEditStory] = useState(null);
   const [commentText, setCommentText] = useState({});
   const [userProfile, setUserProfile] = useState(null);
   const [editProfileModal, setEditProfileModal] = useState(false);
-  const [settingsModal, setSettingsModal] = useState(false);
   const [editProfileData, setEditProfileData] = useState<{ username: string; image: ImageAsset }>({ username: '', image: null });
   const [validationError, setValidationError] = useState<String | null>(null);
   const [randomTopPick, setRandomTopPick] = useState<Story | null>(null);
+
   const { isLoaded, isSignedIn, user } = useUser();
   const { getToken, signOut } = useAuth();
   const insets = useSafeAreaInsets();
+
   const navItems = [
     { name: 'home', label: 'Home', icon: 'home' },
     { name: 'explore', label: 'Discover', icon: 'compass' },
@@ -121,7 +134,7 @@ const App = () => {
   ];
 
   navItems.forEach(item => {
-    animatedValues.current[item.name] = animatedValues.current[item.name] || new Animated.Value(0);
+    animatedValues[item.name] = animatedValues[item.name] || new Animated.Value(0);
   });
 
   const profileImageUri = isLoaded && isSignedIn && user?.imageUrl
@@ -139,7 +152,6 @@ const App = () => {
   }, [activeTab, selectedStory]);
 
   useEffect(() => {
-    
     StatusBar.setHidden(false);
     StatusBar.setBarStyle('light-content');
     StatusBar.setBackgroundColor(Colors.background);
@@ -173,7 +185,7 @@ const App = () => {
     return () => clearInterval(interval);
   }, [stories]);
 
-  const fetchUserProfile = async (userId:any) => {
+  const fetchUserProfile = async (userId: any) => {
     if (!userId) return;
     try {
       const response = await axios.get(`${API_URL}/api/users/${userId}`);
@@ -268,7 +280,7 @@ const App = () => {
           uri: editProfileData.image.uri,
           name: `profile_${Date.now()}.${editProfileData.image.uri.split('.').pop()}`,
           type: `image/${editProfileData.image.uri.split('.').pop()}`,
-        });
+        } as any);
       }
       await axios.put(
         `${API_URL}/api/users/${user.id}`,
@@ -292,16 +304,15 @@ const App = () => {
   const handleSignOut = async () => {
     try {
       await signOut();
-      setActiveTab('index'); // Navigate to index screen
       setUserProfile(null);
       setBookmarkedStories([]);
-      setStories([]);
-      setSelectedStory(null);
+      setActiveTab('home');
       Alert.alert('Success', 'Signed out successfully.');
     } catch (err) {
       Alert.alert('Error', 'Failed to sign out.');
       console.error('Error signing out:', err);
     }
+    setProfileMenuVisible(false);
   };
 
   const handleDeleteProfile = async () => {
@@ -311,7 +322,7 @@ const App = () => {
     }
     Alert.alert(
       'Delete Profile',
-      'Are you sure you want to delete your profile? This action is permanent and cannot be undone.',
+      'Are you sure you want to delete your profile? This action is permanent and will remove all your stories and data.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -319,17 +330,20 @@ const App = () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              await user.delete();
-              setActiveTab('index'); // Navigate to index screen
+              const token = await getToken();
+              await axios.delete(`${API_URL}/api/users/${user.id}`, {
+                headers: { Authorization: `Bearer ${token}` },
+              });
               setUserProfile(null);
               setBookmarkedStories([]);
-              setStories([]);
-              setSelectedStory(null);
+              setStories(stories.filter(s => String(s.authorId?._id || s.authorId) !== String(user.id)));
+              setActiveTab('home');
               Alert.alert('Success', 'Profile deleted successfully.');
             } catch (err) {
               Alert.alert('Error', 'Failed to delete profile.');
               console.error('Error deleting profile:', err);
             }
+            setProfileMenuVisible(false);
           },
         },
       ]
@@ -340,7 +354,7 @@ const App = () => {
     if (activeTab === 'home' || activeTab === 'explore' || activeTab === 'profile') {
       fetchStories();
     }
-    if (activeTab === 'profile' && isSignedIn && user?.id) {
+    if (isSignedIn && user?.id) {
       fetchUserProfile(user.id);
     }
     if (activeTab === 'library') {
@@ -349,8 +363,8 @@ const App = () => {
   }, [activeTab, isSignedIn, user?.id]);
 
   useEffect(() => {
-    Object.keys(animatedValues.current).forEach(tabName => {
-      Animated.timing(animatedValues.current[tabName], {
+    Object.keys(animatedValues).forEach(tabName => {
+      Animated.timing(animatedValues[tabName], {
         toValue: activeTab === tabName ? 1 : 0,
         duration: 300,
         useNativeDriver: true,
@@ -358,7 +372,7 @@ const App = () => {
     });
   }, [activeTab]);
 
-  const handleNavPress = (tabName) => {
+  const handleNavPress = (tabName: string) => {
     setActiveTab(tabName);
     setSelectedStory(null);
   };
@@ -400,7 +414,7 @@ const App = () => {
     }
   };
 
-  const handleLike = async (storyId) => {
+  const handleLike = async (storyId: string) => {
     if (!isSignedIn) {
       Alert.alert('Authentication Required', 'Please sign in to like a story.');
       return;
@@ -423,7 +437,7 @@ const App = () => {
     }
   };
 
-  const handleBookmark = async (storyId) => {
+  const handleBookmark = async (storyId: string) => {
     if (!isSignedIn) {
       Alert.alert('Authentication Required', 'Please sign in to bookmark a story.');
       return;
@@ -446,12 +460,12 @@ const App = () => {
     }
   };
 
-  const handleComment = async (storyId) => {
+  const handleComment = async (storyId: string) => {
     if (!isSignedIn) {
       Alert.alert('Authentication Required', 'Please sign in to comment.');
       return;
     }
-    if (!commentText[storyId] || commentText[storyId].trim() === '') {
+    if (!commentText[storyId as keyof typeof commentText] || (commentText[storyId as keyof typeof commentText] as string).trim() === '') {
       Alert.alert('Invalid Comment', 'Please enter a comment.');
       return;
     }
@@ -459,7 +473,7 @@ const App = () => {
       const token = await getToken();
       const response = await axios.post(
         `${API_URL}/api/stories/${storyId}/comment`,
-        { content: commentText[storyId] },
+        { content: commentText[storyId as keyof typeof commentText] },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       setStories(stories.map(s => (s._id === storyId ? response.data : s)));
@@ -474,7 +488,7 @@ const App = () => {
     }
   };
 
-  const handleDeleteComment = async (storyId, commentId) => {
+  const handleDeleteComment = async (storyId: string, commentId: string) => {
     if (!isSignedIn) {
       Alert.alert('Authentication Required', 'Please sign in to delete a comment.');
       return;
@@ -497,7 +511,7 @@ const App = () => {
               if (selectedStory?._id === storyId) {
                 setSelectedStory(response.data);
               }
-              setBookmarkedStories(bookmarkedStories.map(s => (s._d === storyId ? response.data : s)));
+              setBookmarkedStories(bookmarkedStories.map(s => (s._id === storyId ? response.data : s)));
               Alert.alert('Success', 'Comment deleted.');
             } catch (err) {
               Alert.alert('Error', 'Failed to delete comment.');
@@ -530,7 +544,7 @@ const App = () => {
           uri: editStory.image.uri,
           name: `image_${Date.now()}.${editStory.image.uri.split('.').pop()}`,
           type: `image/${editStory.image.uri.split('.').pop()}`,
-        });
+        } as any);
       }
       const response = await axios.put(
         `${API_URL}/api/stories/${editStory._id}`,
@@ -558,7 +572,7 @@ const App = () => {
     }
   };
 
-  const handleDeleteStory = async (storyId) => {
+  const handleDeleteStory = async (storyId: string) => {
     if (!isSignedIn) {
       Alert.alert('Authentication Required', 'Please sign in to delete a story.');
       return;
@@ -595,7 +609,7 @@ const App = () => {
     );
   };
 
-  const renderStoryCard = (story) => (
+  const renderStoryCard = (story: Story) => (
     <Animated.View style={{ opacity: fadeAnim }}>
       <TouchableOpacity
         style={styles.storyCard}
@@ -615,12 +629,15 @@ const App = () => {
           </View>
           <TouchableOpacity
             style={styles.bookmarkButton}
-            onPress={() => handleBookmark(story._id)}
+            onPress={(e) => {
+              e.stopPropagation();
+              handleBookmark(story._id);
+            }}
           >
             <Ionicons
-              name={story.bookmarks.includes(user?.id) ? 'bookmark' : 'bookmark-outline'}
+              name={story.bookmarks.includes(user?.id || '') ? 'bookmark' : 'bookmark-outline'}
               size={24}
-              color={story.bookmarks.includes(user?.id) ? Colors.primaryAccent : Colors.textSecondary}
+              color={story.bookmarks.includes(user?.id || '') ? Colors.primaryAccent : Colors.textSecondary}
             />
           </TouchableOpacity>
         </View>
@@ -647,16 +664,25 @@ const App = () => {
           <View style={styles.interactionButtons}>
             <TouchableOpacity
               style={styles.interactionButton}
-              onPress={() => handleLike(story._id)}
+              onPress={(e) => {
+                e.stopPropagation();
+                handleLike(story._id);
+              }}
             >
               <Ionicons
-                name={story.likes.includes(user?.id) ? 'heart' : 'heart-outline'}
+                name={story.likes.includes(user?.id || '') ? 'heart' : 'heart-outline'}
                 size={24}
-                color={story.likes.includes(user?.id) ? Colors.like : Colors.textSecondary}
+                color={story.likes.includes(user?.id || '') ? Colors.like : Colors.textSecondary}
               />
               <Text style={styles.interactionCount}>{story.likes.length}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.interactionButton}>
+            <TouchableOpacity
+              style={styles.interactionButton}
+              onPress={(e) => {
+                e.stopPropagation();
+                setSelectedStory(story);
+              }}
+            >
               <Ionicons name="chatbubble-outline" size={24} color={Colors.textSecondary} />
               <Text style={styles.interactionCount}>{story.comments.length}</Text>
             </TouchableOpacity>
@@ -666,130 +692,165 @@ const App = () => {
     </Animated.View>
   );
 
-  const renderStoryDetail = (story) => (
-    <Animated.View style={{ opacity: fadeAnim, flex: 1 }}>
-      <ScrollView style={styles.storyDetailContainer} contentContainerStyle={styles.detailScrollContent}>
-        <View style={styles.detailHeader}>
-          <TouchableOpacity onPress={() => setSelectedStory(null)} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={28} color={Colors.primaryAccent} />
-            <Text style={styles.backButtonText}>Back to Stories</Text>
-          </TouchableOpacity>
-          <View style={styles.storyActions}>
-            {story.authorId === userProfile?._id && (
-              <>
-                <TouchableOpacity
-                  style={styles.storyActionButton}
-                  onPress={() => setEditStory(story)}
-                >
-                  <Ionicons name="pencil" size={24} color={Colors.primaryAccent} />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.storyActionButton}
-                  onPress={() => handleDeleteStory(story._id)}
-                >
-                  <Ionicons name="trash" size={24} color={Colors.error} />
-                </TouchableOpacity>
-              </>
-            )}
-            <TouchableOpacity
-              style={styles.storyActionButton}
-              onPress={() => handleBookmark(story._id)}
-            >
-              <Ionicons
-                name={story.bookmarks.includes(user?.id) ? 'bookmark' : 'bookmark-outline'}
-                size={24}
-                color={story.bookmarks.includes(user?.id) ? Colors.primaryAccent : Colors.textSecondary}
-              />
+  const renderStoryDetail = (story: Story) => (
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={{ flex: 1 }}
+    >
+      <Animated.View style={{ opacity: fadeAnim, flex: 1 }}>
+        <ScrollView
+          style={styles.storyDetailContainer}
+          contentContainerStyle={styles.detailScrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.detailHeader}>
+            <TouchableOpacity onPress={() => setSelectedStory(null)} style={styles.backButton}>
+              <Ionicons name="arrow-back" size={28} color={Colors.primaryAccent} />
+              <Text style={styles.backButtonText}>Back</Text>
             </TouchableOpacity>
-          </View>
-        </View>
-        <Text style={styles.detailTitle}>{story.title}</Text>
-        <View style={styles.detailAuthor}>
-          <Image
-            source={{ uri: story.authorImage || 'https://placehold.co/40x40/1C1C1C/F5F5F5?text=U' }}
-            style={styles.detailAuthorImage}
-          />
-          <View>
-            <Text style={styles.detailAuthorName}>{story.author}</Text>
-            <Text style={styles.detailDate}>
-              {new Date(story.createdAt).toLocaleDateString()}
-            </Text>
-          </View>
-        </View>
-        {story.imageUrl && (
-          <Image
-            source={{ uri: story.imageUrl }}
-            style={styles.detailImage}
-            onError={() => console.log('Failed to load story image')}
-          />
-        )}
-        <Text style={styles.detailContent}>{story.content}</Text>
-        <View style={styles.detailFooter}>
-          <View style={styles.categoryPill}>
-            <Text style={styles.categoryText}>{story.category || 'General'}</Text>
-          </View>
-          <View style={styles.interactionButtons}>
-            <TouchableOpacity
-              style={styles.interactionButton}
-              onPress={() => handleLike(story._id)}
-            >
-              <Ionicons
-                name={story.likes.includes(user?.id) ? 'heart' : 'heart-outline'}
-                size={24}
-                color={story.likes.includes(user?.id) ? Colors.like : Colors.textSecondary}
-              />
-              <Text style={styles.interactionCount}>{story.likes.length}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.interactionButton}>
-              <Ionicons name="chatbubble-outline" size={24} color={Colors.textSecondary} />
-              <Text style={styles.interactionCount}>{story.comments.length}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-        <View style={styles.commentSection}>
-          <Text style={styles.commentsTitle}>Comments ({story.comments.length})</Text>
-          {story.comments.map((comment, index) => (
-            <View key={index} style={styles.comment}>
-              <Text style={styles.commentUser}>{comment.username}</Text>
-              <Text style={styles.commentContent}>{comment.content}</Text>
-              {comment.userId === userProfile?._id && (
-                <TouchableOpacity
-                  style={styles.deleteCommentButton}
-                  onPress={() => handleDeleteComment(story._id, comment._id)}
-                >
-                  <Ionicons name="trash-outline" size={20} color={Colors.error} />
-                </TouchableOpacity>
+            <View style={styles.storyActions}>
+              {String(story.authorId?._id || story.authorId) === String(userProfile?._id) && (
+                <>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setEditStory(story);
+                      setSelectedStory(null);
+                      setActiveTab('write');
+                    }}
+                    style={styles.storyActionButton}
+                  >
+                    <Ionicons name="pencil" size={24} color={Colors.primaryAccent} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.storyActionButton}
+                    onPress={() => handleDeleteStory(story._id)}
+                  >
+                    <Ionicons name="trash" size={24} color={Colors.error} />
+                  </TouchableOpacity>
+                </>
               )}
-            </View>
-          ))}
-          {isSignedIn && (
-            <View style={styles.commentInputContainer}>
-              <Image
-                source={{ uri: profileImageUri }}
-                style={styles.commentUserImage}
-              />
-              <TextInput
-                style={styles.commentInput}
-                placeholder="Add a comment..."
-                placeholderTextColor={Colors.textSecondary}
-                value={commentText[story._id] || ''}
-                onChangeText={text => setCommentText({ ...commentText, [story._id]: text })}
-              />
               <TouchableOpacity
-                style={styles.commentButton}
-                onPress={() => handleComment(story._id)}
+                style={styles.storyActionButton}
+                onPress={() => handleBookmark(story._id)}
               >
-                <Ionicons name="send" size={24} color={Colors.primaryAccent} />
+                <Ionicons
+                  name={story.bookmarks.includes(user?.id || '') ? 'bookmark' : 'bookmark-outline'}
+                  size={24}
+                  color={story.bookmarks.includes(user?.id || '') ? Colors.primaryAccent : Colors.textSecondary}
+                />
               </TouchableOpacity>
             </View>
+          </View>
+
+          <Text style={styles.detailTitle}>{story.title}</Text>
+
+          <View style={styles.detailAuthor}>
+            <Image
+              source={{ uri: story.authorImage || 'https://placehold.co/40x40/1C1C1C/F5F5F5?text=U' }}
+              style={styles.detailAuthorImage}
+            />
+            <View>
+              <Text style={styles.detailAuthorName}>{story.author}</Text>
+              <Text style={styles.detailDate}>
+                {new Date(story.createdAt).toLocaleDateString()}
+              </Text>
+            </View>
+          </View>
+
+          {story.imageUrl && (
+            <Image
+              source={{ uri: story.imageUrl }}
+              style={styles.detailImage}
+              onError={() => console.log('Failed to load story image')}
+            />
           )}
-        </View>
-      </ScrollView>
-    </Animated.View>
+
+          <Text style={styles.detailContent}>{story.content}</Text>
+
+          <View style={styles.detailFooter}>
+            <View style={styles.categoryPill}>
+              <Text style={styles.categoryText}>{story.category || 'General'}</Text>
+            </View>
+            <View style={styles.interactionButtons}>
+              <TouchableOpacity
+                style={styles.interactionButton}
+                onPress={() => handleLike(story._id)}
+              >
+                <Ionicons
+                  name={story.likes.includes(user?.id || '') ? 'heart' : 'heart-outline'}
+                  size={24}
+                  color={story.likes.includes(user?.id || '') ? Colors.like : Colors.textSecondary}
+                />
+                <Text style={styles.interactionCount}>{story.likes.length}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.interactionButton}>
+                <Ionicons name="chatbubble-outline" size={24} color={Colors.textSecondary} />
+                <Text style={styles.interactionCount}>{story.comments.length}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.commentSection}>
+            <Text style={styles.commentsTitle}>Comments ({story.comments.length})</Text>
+            {story.comments.map((comment, index) => (
+              <View key={index} style={styles.comment}>
+                <View style={styles.commentUserContainer}>
+                  <Image
+                    source={{ uri: 'https://placehold.co/30x30/1C1C1C/F5F5F5?text=U' }}
+                    style={styles.commentUserImage}
+                  />
+                  <Text style={styles.commentUser}>{comment.username}</Text>
+                </View>
+                <Text style={styles.commentContent}>{comment.content}</Text>
+                {String(comment.userId?._id || comment.userId) === String(userProfile?._id) && (
+                  <TouchableOpacity
+                    style={styles.deleteCommentButton}
+                    onPress={() => handleDeleteComment(story._id, comment._id)}
+                  >
+                    <Ionicons name="trash-outline" size={20} color={Colors.error} />
+                  </TouchableOpacity>
+                )}
+              </View>
+            ))}
+            {isSignedIn && (
+              <View style={styles.commentInputContainer}>
+                <Image
+                  source={{ uri: profileImageUri }}
+                  style={styles.commentUserImage}
+                />
+                <TextInput
+                  style={styles.commentInput}
+                  placeholder="Add a comment..."
+                  placeholderTextColor={Colors.textSecondary}
+                  value={commentText[story._id as keyof typeof commentText] || ''}
+                  onChangeText={text => setCommentText({ ...commentText, [story._id]: text })}
+                  multiline
+                />
+                <TouchableOpacity
+                  style={styles.commentButton}
+                  onPress={() => handleComment(story._id)}
+                  disabled={!commentText[story._id as keyof typeof commentText]}
+                >
+                  <Ionicons
+                    name="send"
+                    size={24}
+                    color={commentText[story._id as keyof typeof commentText] ? Colors.primaryAccent : Colors.textSecondary}
+                  />
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </ScrollView>
+      </Animated.View>
+    </KeyboardAvoidingView>
   );
 
   const renderHome = () => (
-    <ScrollView style={styles.content} contentContainerStyle={styles.homeScrollContent}>
+    <ScrollView
+      style={styles.content}
+      contentContainerStyle={styles.homeScrollContent}
+      showsVerticalScrollIndicator={false}
+    >
       {isLoading ? (
         <ActivityIndicator size="large" color={Colors.primaryAccent} style={styles.loading} />
       ) : error ? (
@@ -797,17 +858,25 @@ const App = () => {
       ) : (
         <>
           <View style={styles.welcomeBanner}>
-            <Text style={styles.welcomeText}>Hello there,</Text>
-            <Text style={styles.welcomeName}>
-              {isSignedIn && user?.firstName ? user.firstName : 'Explorer'}!
-            </Text>
-            <Text style={styles.welcomeMessage}>Discover timeless tales.</Text>
+            <LinearGradient
+              colors={[Colors.goldDark, Colors.goldLight]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.welcomeGradient}
+            >
+              <Text style={styles.welcomeText}>Hello there,</Text>
+              <Text style={styles.welcomeName}>
+                {isSignedIn && user?.firstName ? user.firstName : 'Explorer'}!
+              </Text>
+              <Text style={styles.welcomeMessage}>Discover timeless tales</Text>
+            </LinearGradient>
           </View>
 
           <View style={styles.headerSection}>
-            <Text style={styles.sectionTitle}>You Might Also Like</Text>
-            <Text style={styles.sectionSubtitle}>A special story for you</Text>
+            <Text style={styles.sectionTitle}>Featured Story</Text>
+            <Text style={styles.sectionSubtitle}>Today's special pick for you</Text>
           </View>
+
           {randomTopPick ? (
             <Animated.View style={{ opacity: fadeAnim, marginBottom: 30 }}>
               <TouchableOpacity
@@ -816,16 +885,16 @@ const App = () => {
                 activeOpacity={0.8}
               >
                 <Image
-                  source={{ uri: randomTopPick.imageUrl || 'https://placehold.co/200x120/1C1C1C/BBBBBB?text=Top' }}
+                  source={{ uri: randomTopPick.imageUrl || 'https://placehold.co/600x400/1C1C1C/BBBBBB?text=Top+Pick' }}
                   style={styles.featuredStoryImage}
                 />
                 <LinearGradient
-                  colors={['transparent', Colors.cardBackground]}
+                  colors={['transparent', 'rgba(0,0,0,0.8)']}
                   style={styles.featuredStoryGradient}
                 >
                   <View style={styles.featuredStoryInfo}>
                     <Text style={styles.featuredStoryTitle} numberOfLines={2}>{randomTopPick.title}</Text>
-                    <Text style={styles.featuredStoryAuthor}>{randomTopPick.author}</Text>
+                    <Text style={styles.featuredStoryAuthor}>by {randomTopPick.author}</Text>
                     <View style={styles.categoryPillFeatured}>
                       <Text style={styles.categoryText}>{randomTopPick.category || 'General'}</Text>
                     </View>
@@ -836,14 +905,15 @@ const App = () => {
           ) : (
             <View style={styles.emptyStateHorizontal}>
               <Ionicons name="trending-up-outline" size={40} color={Colors.primaryAccent} />
-              <Text style={styles.emptyTextSmall}>No top stories yet</Text>
+              <Text style={styles.emptyTextSmall}>No featured stories yet</Text>
             </View>
           )}
 
           <View style={styles.headerSection}>
             <Text style={styles.sectionTitle}>Recently Added</Text>
-            <Text style={styles.sectionSubtitle}>Newest tales to explore</Text>
+            <Text style={styles.sectionSubtitle}>Explore the newest tales</Text>
           </View>
+
           <FlatList
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -852,26 +922,21 @@ const App = () => {
             renderItem={({ item }) => (
               <Animated.View style={{ opacity: fadeAnim, marginRight: 20 }}>
                 <TouchableOpacity
-                  style={styles.featuredStoryCard}
+                  style={styles.recentStoryCard}
                   onPress={() => setSelectedStory(item)}
                   activeOpacity={0.8}
                 >
                   <Image
-                    source={{ uri: item.imageUrl || 'https://placehold.co/200x120/1C1C1C/BBBBBB?text=New' }}
-                    style={styles.featuredStoryImage}
+                    source={{ uri: item.imageUrl || 'https://placehold.co/300x200/1C1C1C/BBBBBB?text=New' }}
+                    style={styles.recentStoryImage}
                   />
-                  <LinearGradient
-                    colors={['transparent', Colors.cardBackground]}
-                    style={styles.featuredStoryGradient}
-                  >
-                    <View style={styles.featuredStoryInfo}>
-                      <Text style={styles.featuredStoryTitle} numberOfLines={2}>{item.title}</Text>
-                      <Text style={styles.featuredStoryAuthor}>{item.author}</Text>
-                      <View style={styles.categoryPillFeatured}>
-                        <Text style={styles.categoryText}>{item.category || 'General'}</Text>
-                      </View>
+                  <View style={styles.recentStoryInfo}>
+                    <Text style={styles.recentStoryTitle} numberOfLines={2}>{item.title}</Text>
+                    <Text style={styles.recentStoryAuthor}>by {item.author}</Text>
+                    <View style={styles.categoryPillSmall}>
+                      <Text style={styles.categoryText}>{item.category || 'General'}</Text>
                     </View>
-                  </LinearGradient>
+                  </View>
                 </TouchableOpacity>
               </Animated.View>
             )}
@@ -886,8 +951,9 @@ const App = () => {
 
           <View style={styles.headerSection}>
             <Text style={styles.sectionTitle}>All Stories</Text>
-            <Text style={styles.sectionSubtitle}>Dive into our full collection</Text>
+            <Text style={styles.sectionSubtitle}>Dive into our collection</Text>
           </View>
+
           <FlatList
             data={stories}
             keyExtractor={item => item._id}
@@ -896,9 +962,12 @@ const App = () => {
             ListEmptyComponent={() => (
               <View style={styles.emptyState}>
                 <Ionicons name="book-outline" size={50} color={Colors.primaryAccent} />
-                <Text style={styles.emptyText}>No stories available yet.</Text>
+                <Text style={styles.emptyText}>No stories available yet</Text>
                 <Text style={styles.emptyTextSmall}>Be the first to create one!</Text>
-                <TouchableOpacity style={styles.createButtonEmpty} onPress={() => handleNavPress('write')}>
+                <TouchableOpacity
+                  style={styles.createButtonEmpty}
+                  onPress={() => handleNavPress('write')}
+                >
                   <Text style={styles.createButtonTextEmpty}>Add New Story</Text>
                 </TouchableOpacity>
               </View>
@@ -911,7 +980,11 @@ const App = () => {
   );
 
   const renderExplore = () => (
-    <ScrollView style={styles.content} contentContainerStyle={styles.exploreScrollContent}>
+    <ScrollView
+      style={styles.content}
+      contentContainerStyle={styles.exploreScrollContent}
+      showsVerticalScrollIndicator={false}
+    >
       <View style={styles.searchContainer}>
         <Ionicons name="search" size={24} color={Colors.textSecondary} style={styles.searchIcon} />
         <TextInput
@@ -920,6 +993,7 @@ const App = () => {
           placeholderTextColor={Colors.textSecondary}
           value={searchQuery}
           onChangeText={setSearchQuery}
+          returnKeyType="search"
         />
         {searchQuery.length > 0 && (
           <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearSearchButton}>
@@ -932,15 +1006,16 @@ const App = () => {
         <Text style={styles.sectionTitle}>Browse Categories</Text>
         <Text style={styles.sectionSubtitle}>Find tales by genre</Text>
       </View>
+
       <View style={styles.categoryGrid}>
         {Categories.map((category) => (
           <TouchableOpacity
             key={category}
-            style={styles.categoryGridItem}
-            onPress={() => {
-              setSearchQuery(category);
-              Alert.alert('Category Filter', `Filtering for "${category}" stories.`);
-            }}
+            style={[
+              styles.categoryGridItem,
+              searchQuery === category && styles.categoryGridItemActive
+            ]}
+            onPress={() => setSearchQuery(category)}
           >
             <Text style={styles.categoryGridText}>{category}</Text>
           </TouchableOpacity>
@@ -948,9 +1023,14 @@ const App = () => {
       </View>
 
       <View style={styles.headerSection}>
-        <Text style={styles.sectionTitle}>Search Results</Text>
-        <Text style={styles.sectionSubtitle}>Stories matching your query</Text>
+        <Text style={styles.sectionTitle}>
+          {searchQuery ? 'Search Results' : 'Popular Stories'}
+        </Text>
+        <Text style={styles.sectionSubtitle}>
+          {searchQuery ? `Stories matching "${searchQuery}"` : 'Trending in the community'}
+        </Text>
       </View>
+
       {isLoading ? (
         <ActivityIndicator size="large" color={Colors.primaryAccent} style={styles.loading} />
       ) : error ? (
@@ -968,8 +1048,8 @@ const App = () => {
           ListEmptyComponent={() => (
             <View style={styles.emptyState}>
               <Ionicons name="search-outline" size={50} color={Colors.primaryAccent} />
-              <Text style={styles.emptyText}>No stories found.</Text>
-              <Text style={styles.emptyTextSmall}>Try a different search term or category.</Text>
+              <Text style={styles.emptyText}>No stories found</Text>
+              <Text style={styles.emptyTextSmall}>Try a different search term or category</Text>
             </View>
           )}
           scrollEnabled={false}
@@ -979,80 +1059,117 @@ const App = () => {
   );
 
   const renderWrite = () => (
-    <ScrollView style={styles.content} contentContainerStyle={styles.writeScrollContent}>
-      <Text style={styles.modalTitle}>{editStory ? 'Edit Your Story' : 'Create a New Story'}</Text>
-      {validationError && <Text style={styles.validationErrorText}>{validationError}</Text>}
-      <TextInput
-        style={styles.input}
-        placeholder="Story Title"
-        placeholderTextColor={Colors.textSecondary}
-        value={editStory ? editStory.title : newStory.title}
-        onChangeText={text => (editStory ? setEditStory({ ...editStory, title: text }) : setNewStory({ ...newStory, title: text }))}
-      />
-      <TextInput
-        style={[styles.input, styles.textArea]}
-        placeholder="Write your story here..."
-        placeholderTextColor={Colors.textSecondary}
-        multiline
-        numberOfLines={10}
-        value={editStory ? editStory.content : newStory.content}
-        onChangeText={text => (editStory ? setEditStory({ ...editStory, content: text }) : setNewStory({ ...newStory, content: text }))}
-      />
-      <View style={styles.pickerContainer}>
-        <Picker
-          selectedValue={editStory ? editStory.category : newStory.category}
-          style={styles.picker}
-          itemStyle={styles.pickerItem}
-          onValueChange={(itemValue) => (editStory ? setEditStory({ ...editStory, category: itemValue }) : setNewStory({ ...newStory, category: itemValue }))}
-        >
-          {Categories.map((cat, index) => (
-            <Picker.Item key={index} label={cat} value={cat} />
-          ))}
-        </Picker>
-      </View>
-      <TouchableOpacity style={styles.mediaUploadButton} onPress={() => pickMedia()}>
-        <Ionicons name="image-outline" size={24} color={Colors.primaryAccent} />
-        <Text style={styles.mediaUploadButtonText}>
-          {editStory?.image?.uri || newStory.image?.uri ? 'Change Image' : 'Add Image'}
-        </Text>
-        {(editStory?.image?.uri || newStory.image?.uri) && (
-          <Ionicons name="checkmark-circle" size={20} color={Colors.success} style={{ marginLeft: 'auto' }} />
-        )}
-      </TouchableOpacity>
-      {(editStory?.image?.uri || newStory.image?.uri) && (
-        <Text style={styles.selectedMediaText}>
-          Selected Image: {editStory?.image?.fileName || newStory.image?.fileName || 'image.jpg'}
-        </Text>
-      )}
-      <TouchableOpacity
-        style={styles.submitButton}
-        onPress={editStory ? handleEditStory : handleCreateStory}
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={{ flex: 1 }}
+    >
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.writeScrollContent}
+        keyboardShouldPersistTaps="handled"
       >
-        <LinearGradient
-          colors={[Colors.primaryAccent, Colors.secondaryAccent]}
-          style={styles.submitButtonGradient}
-        >
-          {isLoading ? (
-            <ActivityIndicator size="small" color={Colors.textPrimary} />
-          ) : (
-            <Text style={styles.submitButtonText}>
-              {editStory ? 'Update Story' : 'Publish Story'}
-            </Text>
-          )}
-        </LinearGradient>
-      </TouchableOpacity>
-      {editStory && (
+        <Text style={styles.modalTitle}>
+          {editStory ? 'Edit Your Story' : 'Create a New Story'}
+        </Text>
+
+        {validationError && (
+          <View style={styles.validationErrorContainer}>
+            <Ionicons name="warning" size={20} color={Colors.error} />
+            <Text style={styles.validationErrorText}>{validationError}</Text>
+          </View>
+        )}
+
+        <TextInput
+          style={styles.input}
+          placeholder="Story Title"
+          placeholderTextColor={Colors.textSecondary}
+          value={editStory ? editStory.title : newStory.title}
+          onChangeText={text => (editStory ? setEditStory({ ...editStory, title: text }) : setNewStory({ ...newStory, title: text }))}
+        />
+
+        <TextInput
+          style={[styles.input, styles.textArea]}
+          placeholder="Write your story here..."
+          placeholderTextColor={Colors.textSecondary}
+          multiline
+          numberOfLines={10}
+          value={editStory ? editStory.content : newStory.content}
+          onChangeText={text => (editStory ? setEditStory({ ...editStory, content: text }) : setNewStory({ ...newStory, content: text }))}
+        />
+
+        <View style={styles.pickerContainer}>
+          <Picker
+            selectedValue={editStory ? editStory.category : newStory.category}
+            style={styles.picker}
+            itemStyle={styles.pickerItem}
+            onValueChange={(itemValue) => (editStory ? setEditStory({ ...editStory, category: itemValue }) : setNewStory({ ...newStory, category: itemValue }))}
+          >
+            {Categories.map((cat, index) => (
+              <Picker.Item key={index} label={cat} value={cat} />
+            ))}
+          </Picker>
+        </View>
+
         <TouchableOpacity
-          style={styles.cancelButton}
-          onPress={() => {
-            setEditStory(null);
-            setValidationError(null);
-          }}
+          style={styles.mediaUploadButton}
+          onPress={() => pickMedia()}
         >
-          <Text style={styles.cancelButtonText}>Cancel Edit</Text>
+          <Ionicons
+            name={editStory?.image?.uri || newStory.image?.uri ? "image" : "image-outline"}
+            size={24}
+            color={Colors.primaryAccent}
+          />
+          <Text style={styles.mediaUploadButtonText}>
+            {editStory?.image?.uri || newStory.image?.uri ? 'Change Image' : 'Add Image'}
+          </Text>
+          {(editStory?.image?.uri || newStory.image?.uri) && (
+            <Ionicons
+              name="checkmark-circle"
+              size={20}
+              color={Colors.success}
+              style={{ marginLeft: 'auto' }}
+            />
+          )}
         </TouchableOpacity>
-      )}
-    </ScrollView>
+
+        {(editStory?.image?.uri || newStory.image?.uri) && (
+          <Text style={styles.selectedMediaText}>
+            Selected: {editStory?.image?.fileName || newStory.image?.fileName || 'image.jpg'}
+          </Text>
+        )}
+
+        <TouchableOpacity
+          style={styles.submitButton}
+          onPress={editStory ? handleEditStory : handleCreateStory}
+          disabled={isLoading}
+        >
+          <LinearGradient
+            colors={[Colors.primaryAccent, Colors.secondaryAccent]}
+            style={styles.submitButtonGradient}
+          >
+            {isLoading ? (
+              <ActivityIndicator size="small" color={Colors.textPrimary} />
+            ) : (
+              <Text style={styles.submitButtonText}>
+                {editStory ? 'Update Story' : 'Publish Story'}
+              </Text>
+            )}
+          </LinearGradient>
+        </TouchableOpacity>
+
+        {editStory && (
+          <TouchableOpacity
+            style={styles.cancelButton}
+            onPress={() => {
+              setEditStory(null);
+              setValidationError(null);
+            }}
+          >
+            <Text style={styles.cancelButtonText}>Cancel Edit</Text>
+          </TouchableOpacity>
+        )}
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 
   const renderLibrary = () => {
@@ -1060,11 +1177,16 @@ const App = () => {
     const showMyStories = userStories.length > 0;
 
     return (
-      <ScrollView style={styles.content} contentContainerStyle={styles.libraryScrollContent}>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.libraryScrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.headerSection}>
           <Text style={styles.sectionTitle}>My Bookmarks</Text>
           <Text style={styles.sectionSubtitle}>Your saved stories</Text>
         </View>
+
         {isLoading ? (
           <ActivityIndicator size="large" color={Colors.primaryAccent} style={styles.loading} />
         ) : error ? (
@@ -1078,19 +1200,21 @@ const App = () => {
             ListEmptyComponent={() => (
               <View style={styles.emptyState}>
                 <Ionicons name="bookmark-outline" size={50} color={Colors.primaryAccent} />
-                <Text style={styles.emptyText}>No saved stories yet.</Text>
-                <Text style={styles.emptyTextSmall}>Bookmark stories from Home or Explore!</Text>
+                <Text style={styles.emptyText}>No saved stories yet</Text>
+                <Text style={styles.emptyTextSmall}>Bookmark stories from Home or Explore</Text>
               </View>
             )}
             scrollEnabled={false}
           />
         )}
+
         {showMyStories && (
           <>
             <View style={styles.headerSection}>
               <Text style={styles.sectionTitle}>My Stories</Text>
               <Text style={styles.sectionSubtitle}>Stories you've created</Text>
             </View>
+
             {isLoading ? (
               <ActivityIndicator size="large" color={Colors.primaryAccent} style={styles.loading} />
             ) : error ? (
@@ -1104,9 +1228,12 @@ const App = () => {
                 ListEmptyComponent={() => (
                   <View style={styles.emptyState}>
                     <Ionicons name="create-outline" size={50} color={Colors.primaryAccent} />
-                    <Text style={styles.emptyText}>You haven't created any stories yet.</Text>
-                    <Text style={styles.emptyTextSmall}>Share your wisdom!</Text>
-                    <TouchableOpacity style={styles.createButtonEmpty} onPress={() => handleNavPress('write')}>
+                    <Text style={styles.emptyText}>You haven't created any stories yet</Text>
+                    <Text style={styles.emptyTextSmall}>Share your wisdom with the community</Text>
+                    <TouchableOpacity
+                      style={styles.createButtonEmpty}
+                      onPress={() => handleNavPress('write')}
+                    >
                       <Text style={styles.createButtonTextEmpty}>Create First Story</Text>
                     </TouchableOpacity>
                   </View>
@@ -1121,12 +1248,14 @@ const App = () => {
   };
 
   const renderProfile = () => {
-    const createdStoriesCount = userProfile
-      ? stories.filter(s => s.authorId && String(s.authorId._id) === String(userProfile._id)).length
-      : 0;
+    const createdStoriesCount = userProfile ? stories.filter(s => s.authorId && String(s.authorId._id) === String(userProfile._id)).length : 0;
 
     return (
-      <ScrollView style={styles.content} contentContainerStyle={styles.profileScrollContent}>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.profileScrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         {isLoading ? (
           <ActivityIndicator size="large" color={Colors.primaryAccent} style={styles.loading} />
         ) : error ? (
@@ -1134,33 +1263,54 @@ const App = () => {
         ) : !userProfile ? (
           <View style={styles.emptyState}>
             <Ionicons name="person-outline" size={50} color={Colors.primaryAccent} />
-            <Text style={styles.emptyText}>Profile data not loaded.</Text>
-            <Text style={styles.emptyTextSmall}>Please try again later.</Text>
+            <Text style={styles.emptyText}>Profile data not loaded</Text>
+            <Text style={styles.emptyTextSmall}>Please try again later</Text>
           </View>
         ) : (
           <View style={styles.profileContainer}>
-            <Image
-              source={{ uri: profileImageUri || userProfile.imageUrl || 'https://placehold.co/100x100/1C1C1C/F5F5F5?text=Profile' }}
-              style={styles.profileImage}></Image>
+            <View style={styles.profileImageContainer}>
+              <Image
+                source={{ uri: profileImageUri || userProfile.imageUrl || 'https://placehold.co/150x150/1C1C1C/F5F5F5?text=Profile' }}
+                style={styles.profileImage}
+              />
+              <TouchableOpacity
+                style={styles.editImageButton}
+                onPress={() => setEditProfileModal(true)}
+              >
+                <Ionicons name="camera" size={20} color={Colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
+
             <Text style={styles.profileName}>{userProfile?.username || 'Guest'}</Text>
-            {userProfile?.email && <Text style={styles.profileEmail}>{userProfile.email}</Text>}
+
+            {userProfile?.email && (
+              <View style={styles.profileEmailContainer}>
+                <Ionicons name="mail" size={16} color={Colors.textSecondary} />
+                <Text style={styles.profileEmail}>{userProfile.email}</Text>
+              </View>
+            )}
+
             <View style={styles.profileStats}>
               <View style={styles.statItem}>
                 <Text style={styles.statNumber}>
-                  {stories.filter(s => s.likes.includes(user?.id)).length}
+                  {stories.filter(s => s.likes.includes(user?.id || '')).length}
                 </Text>
-                <Text style={styles.statLabel}>Liked Stories</Text>
+                <Text style={styles.statLabel}>Liked</Text>
               </View>
               <View style={styles.statItem}>
                 <Text style={styles.statNumber}>{bookmarkedStories.length}</Text>
-                <Text style={styles.statLabel}>Bookmarked Stories</Text>
+                <Text style={styles.statLabel}>Saved</Text>
               </View>
               <View style={styles.statItem}>
                 <Text style={styles.statNumber}>{createdStoriesCount}</Text>
-                <Text style={styles.statLabel}>Created Stories</Text>
+                <Text style={styles.statLabel}>Created</Text>
               </View>
             </View>
-            <TouchableOpacity style={styles.editProfileButton} onPress={() => setEditProfileModal(true)}>
+
+            <TouchableOpacity
+              style={styles.editProfileButton}
+              onPress={() => setEditProfileModal(true)}
+            >
               <LinearGradient
                 colors={[Colors.primaryAccent, Colors.secondaryAccent]}
                 style={styles.editProfileButtonGradient}
@@ -1171,91 +1321,79 @@ const App = () => {
             </TouchableOpacity>
           </View>
         )}
+
         <Modal
           animationType="slide"
           transparent={true}
           visible={editProfileModal}
           onRequestClose={() => setEditProfileModal(false)}
         >
-          <SafeAreaView style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Edit Profile</Text>
-              <TouchableOpacity onPress={() => setEditProfileModal(false)}>
-                <Ionicons name="close" size={30} color={Colors.textPrimary} />
-              </TouchableOpacity>
-            </View>
-            <TextInput
-              style={styles.input}
-              placeholder="Username"
-              placeholderTextColor={Colors.textSecondary}
-              value={editProfileData.username}
-              onChangeText={text => setEditProfileData({ ...editProfileData, username: text })}
-            />
-            <TouchableOpacity style={styles.mediaUploadButton} onPress={() => pickMedia(true)}>
-              <Ionicons name="image-outline" size={24} color={Colors.primaryAccent} />
-              <Text style={styles.mediaUploadButtonText}>
-                {editProfileData.image?.uri ? 'Change Profile Picture' : 'Add Profile Picture'}
-              </Text>
-              {editProfileData.image?.uri && (
-                <Ionicons name="checkmark-circle" size={20} color={Colors.success} style={{ marginLeft: 'auto' }} />
-              )}
-            </TouchableOpacity>
-            {editProfileData.image?.uri && (
-              <Text style={styles.selectedMediaText}>
-                Selected Image: {editProfileData.image?.fileName || 'image.jpg'}
-              </Text>
-            )}
-            <TouchableOpacity style={styles.submitButton} onPress={handleEditProfile}>
-              <LinearGradient
-                colors={[Colors.primaryAccent, Colors.secondaryAccent]}
-                style={styles.submitButtonGradient}
-              >
-                <Text style={styles.submitButtonText}>Save Changes</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          </SafeAreaView>
-        </Modal>
-        <Modal
-          animationType="slide"
-          transparent={true}
-          visible={settingsModal}
-          onRequestClose={() => setSettingsModal(false)}
-        >
-          <SafeAreaView style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Settings</Text>
-              <TouchableOpacity onPress={() => setSettingsModal(false)}>
-                <Ionicons name="close" size={30} color={Colors.textPrimary} />
-              </TouchableOpacity>
-            </View>
-            <TouchableOpacity
-              style={styles.settingsButton}
-              onPress={() => {
-                setSettingsModal(false);
-                setEditProfileModal(true);
-              }}
-            >
-              <Text style={styles.settingsButtonText}>Edit Profile</Text>
-            </TouchableOpacity>
-            <View style={styles.settingsFooter}>
-              <TouchableOpacity style={styles.settingsActionButton} onPress={handleSignOut}>
-                <LinearGradient
-                  colors={[Colors.primaryAccent, Colors.secondaryAccent]}
-                  style={styles.settingsActionButtonGradient}
+          <Pressable
+            style={styles.modalOverlay}
+            onPress={() => setEditProfileModal(false)}
+          >
+            <Pressable style={styles.modalContainer}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Edit Profile</Text>
+                <TouchableOpacity
+                  onPress={() => setEditProfileModal(false)}
+                  style={styles.modalCloseButton}
                 >
-                  <Text style={styles.settingsActionButtonText}>Sign Out</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.settingsActionButton} onPress={handleDeleteProfile}>
-                <LinearGradient
-                  colors={[Colors.error, Colors.error]}
-                  style={styles.settingsActionButtonGradient}
+                  <Ionicons name="close" size={24} color={Colors.textPrimary} />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.modalContent}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Username"
+                  placeholderTextColor={Colors.textSecondary}
+                  value={editProfileData.username}
+                  onChangeText={text => setEditProfileData({ ...editProfileData, username: text })}
+                />
+
+                <TouchableOpacity
+                  style={styles.mediaUploadButton}
+                  onPress={() => pickMedia(true)}
                 >
-                  <Text style={styles.settingsActionButtonText}>Delete Profile</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            </View>
-          </SafeAreaView>
+                  <Ionicons
+                    name={editProfileData.image?.uri ? "image" : "image-outline"}
+                    size={24}
+                    color={Colors.primaryAccent}
+                  />
+                  <Text style={styles.mediaUploadButtonText}>
+                    {editProfileData.image?.uri ? 'Change Profile Picture' : 'Add Profile Picture'}
+                  </Text>
+                  {editProfileData.image?.uri && (
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={20}
+                      color={Colors.success}
+                      style={{ marginLeft: 'auto' }}
+                    />
+                  )}
+                </TouchableOpacity>
+
+                {editProfileData.image?.uri && (
+                  <Text style={styles.selectedMediaText}>
+                    Selected: {editProfileData.image?.fileName || 'image.jpg'}
+                  </Text>
+                )}
+
+                <TouchableOpacity
+                  style={styles.submitButton}
+                  onPress={handleEditProfile}
+                >
+                  <LinearGradient
+                    colors={[Colors.primaryAccent, Colors.secondaryAccent]}
+                    style={styles.submitButtonGradient}
+                  >
+                    <Text style={styles.submitButtonText}>Save Changes</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
+            </Pressable>
+          </Pressable>
         </Modal>
       </ScrollView>
     );
@@ -1264,24 +1402,64 @@ const App = () => {
   const renderHeader = () => (
     <View style={styles.header}>
       <Text style={styles.headerTitle}>DevTales</Text>
-      {isSignedIn && activeTab === 'profile' ? (
+
+      {isSignedIn ? (
+        activeTab === 'profile' ? (
+          <TouchableOpacity
+            style={styles.profileButton}
+            onPress={() => setProfileMenuVisible(true)}
+          >
+            <Ionicons name="ellipsis-vertical" size={28} color={Colors.primaryAccent} />
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={styles.profileButton}
+            onPress={() => handleNavPress('profile')}
+          >
+            <Image
+              source={{ uri: userProfile?.imageUrl || 'https://placehold.co/100x100/8B6F47/F5F5F5?text=U' }}
+              style={styles.headerProfileImage}
+            />
+          </TouchableOpacity>
+        )
+      ) : (
         <TouchableOpacity
-          style={styles.settingsButton}
-          onPress={() => setSettingsModal(true)}
+          style={styles.signInButton}
+          onPress={() => router.replace('/auth')}
         >
-          <Ionicons name="ellipsis-vertical" size={24} color={Colors.textPrimary} />
+          <Text style={styles.signInButtonText}>Sign In</Text>
         </TouchableOpacity>
-      ) : isSignedIn ? (
+      )}
+
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={profileMenuVisible}
+        onRequestClose={() => setProfileMenuVisible(false)}
+      >
         <TouchableOpacity
-          style={styles.profileButton}
-          onPress={() => handleNavPress('profile')}
+          style={styles.profileMenuOverlay}
+          activeOpacity={1}
+          onPress={() => setProfileMenuVisible(false)}
         >
-          <Image
-            source={{ uri: userProfile?.imageUrl || 'https://placehold.co/100x100/8B6F47/F5F5F5?text=U' }}
-            style={styles.headerProfileImage}
-          />
+          <View style={styles.profileMenu}>
+            <TouchableOpacity
+              style={styles.profileMenuItem}
+              onPress={handleSignOut}
+            >
+              <Ionicons name="log-out-outline" size={24} color={Colors.textPrimary} />
+              <Text style={styles.profileMenuText}>Sign Out</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.profileMenuItem}
+              onPress={handleDeleteProfile}
+            >
+              <Ionicons name="trash-outline" size={24} color={Colors.error} />
+              <Text style={[styles.profileMenuText, { color: Colors.error }]}>Delete Profile</Text>
+            </TouchableOpacity>
+          </View>
         </TouchableOpacity>
-      ) : null}
+      </Modal>
     </View>
   );
 
@@ -1290,18 +1468,12 @@ const App = () => {
       return renderStoryDetail(selectedStory);
     }
     switch (activeTab) {
-      case 'home':
-        return renderHome();
-      case 'explore':
-        return renderExplore();
-      case 'write':
-        return renderWrite();
-      case 'library':
-        return renderLibrary();
-      case 'profile':
-        return renderProfile();
-      default:
-        return renderHome();
+      case 'home': return renderHome();
+      case 'explore': return renderExplore();
+      case 'write': return renderWrite();
+      case 'library': return renderLibrary();
+      case 'profile': return renderProfile();
+      default: return renderHome();
     }
   };
 
@@ -1322,21 +1494,18 @@ const App = () => {
         hidden={false}
         translucent={Platform.OS === 'android' ? false : undefined}
       />
+
       <SafeAreaView style={{ flex: 1, backgroundColor: Colors.background }}>
         {renderHeader()}
         {renderContent()}
+
         <View style={styles.navbar}>
           {navItems.map(item => {
             const isFocused = activeTab === item.name;
             const iconColor = isFocused ? Colors.primaryAccent : Colors.textSecondary;
-            const translateY = animatedValues.current[item.name].interpolate({
-              inputRange: [0, 1],
-              outputRange: [0, -10],
-            });
-            const opacity = animatedValues.current[item.name].interpolate({
-              inputRange: [0, 1],
-              outputRange: [0.7, 1],
-            });
+            const translateY = animatedValues[item.name].interpolate({ inputRange: [0, 1], outputRange: [0, -10] });
+            const opacity = animatedValues[item.name].interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] });
+
             return (
               <TouchableOpacity
                 key={item.name}
@@ -1365,15 +1534,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
-  profileImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    borderWidth: 2,
-    borderColor: Colors.primaryAccent,
-    marginBottom: 15,
-    backgroundColor: Colors.border,
-  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -1390,150 +1550,180 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    padding: 15,
     backgroundColor: Colors.cardBackground,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 5,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 15 : 15,
   },
   headerTitle: {
-    fontSize: 26,
-    fontWeight: '700',
-    color: Colors.textPrimary,
+    color: Colors.primaryAccent,
+    fontSize: 28,
     fontFamily: Fonts.heading,
-    paddingTop: 10,
+    letterSpacing: 1,
   },
   profileButton: {
-    paddingTop:5,
-  },
-  headerProfileImage: {
     width: 40,
     height: 40,
     borderRadius: 20,
+    overflow: 'hidden',
     borderWidth: 2,
     borderColor: Colors.primaryAccent,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  settingsButton: {
-    paddingTop: 25,
+  headerProfileImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  signInButton: {
+    backgroundColor: Colors.primaryAccent,
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  signInButtonText: {
+    color: Colors.textPrimary,
+    fontFamily: Fonts.button,
+    fontSize: 16,
+  },
+  profileMenuOverlay: {
+    flex: 1,
+    justifyContent: 'flex-start',
+    alignItems: 'flex-end',
+    backgroundColor: Colors.overlay,
+  },
+  profileMenu: {
+    backgroundColor: Colors.cardBackground,
+    borderRadius: 10,
+    marginTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 60 : 60,
+    marginRight: 15,
     padding: 10,
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+    minWidth: 180,
+  },
+  profileMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+  },
+  profileMenuText: {
+    color: Colors.textPrimary,
+    fontFamily: Fonts.button,
+    fontSize: 16,
+    marginLeft: 10,
   },
   content: {
     flex: 1,
-    paddingTop: 10,
-    paddingBottom: 100,
+    backgroundColor: Colors.background,
   },
   homeScrollContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-  },
-  exploreScrollContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-  },
-  writeScrollContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-  },
-  libraryScrollContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-  },
-  profileScrollContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    alignItems: 'center',
+    paddingBottom: 100,
   },
   welcomeBanner: {
-    backgroundColor: Colors.cardBackground,
     borderRadius: 15,
+    margin: 15,
+    marginBottom: 20,
+    overflow: 'hidden',
+  },
+  welcomeGradient: {
     padding: 20,
-    marginBottom: 25,
-    marginTop: 20,
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 5,
-    elevation: 6,
+    paddingVertical: 25,
   },
   welcomeText: {
-    fontSize: 18,
-    color: Colors.textSecondary,
-    fontFamily: Fonts.body,
-    marginBottom: 5,
+    fontSize: 20,
+    fontFamily: Fonts.subheading,
+    color: Colors.textPrimary,
+    opacity: 0.9,
   },
   welcomeName: {
     fontSize: 28,
-    color: Colors.primaryAccent,
     fontFamily: Fonts.heading,
-    fontWeight: '700',
-    marginBottom: 10,
+    color: Colors.textPrimary,
+    marginTop: 5,
   },
   welcomeMessage: {
     fontSize: 16,
-    color: Colors.textPrimary,
     fontFamily: Fonts.body,
+    color: Colors.textPrimary,
+    marginTop: 10,
+    opacity: 0.9,
   },
   headerSection: {
+    paddingHorizontal: 15,
     marginBottom: 15,
-    marginTop: 20,
   },
   sectionTitle: {
-    fontSize: 24,
+    fontSize: 22,
+    fontFamily: Fonts.heading,
     color: Colors.textPrimary,
-    fontFamily: Fonts.subheading,
-    fontWeight: '600',
   },
   sectionSubtitle: {
     fontSize: 14,
-    color: Colors.textSecondary,
     fontFamily: Fonts.body,
+    color: Colors.textSecondary,
+    marginTop: 5,
   },
   featuredStoriesList: {
-    paddingRight: 20,
+    paddingHorizontal: 15,
     marginBottom: 30,
-    paddingLeft: 5,
   },
   featuredStoryCard: {
-    width: screenWidth * 0.65,
-    height: screenWidth * 0.45,
+    width: 100,
+    height: screenWidth * 0.6,
     borderRadius: 15,
     overflow: 'hidden',
     backgroundColor: Colors.cardBackground,
+    position: 'relative',
     shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 5,
-    elevation: 6,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 8,
+    margin: 10
   },
   featuredStoryImage: {
     width: '100%',
     height: '100%',
-    position: 'absolute',
+    resizeMode: 'cover',
   },
   featuredStoryGradient: {
-    flex: 1,
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: -1,
+
+    height: '70%',
     justifyContent: 'flex-end',
     padding: 15,
   },
   featuredStoryInfo: {
-    //
+    flexDirection: 'column',
   },
   featuredStoryTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: Colors.textPrimary,
+    fontSize: 22,
     fontFamily: Fonts.heading,
+    color: Colors.textPrimary,
+    marginBottom: 5,
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   featuredStoryAuthor: {
     fontSize: 14,
-    color: Colors.textSecondary,
     fontFamily: Fonts.body,
-    marginTop: 5,
+    color: Colors.textSecondary,
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   categoryPillFeatured: {
     backgroundColor: Colors.primaryAccent,
@@ -1541,21 +1731,60 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     alignSelf: 'flex-start',
-    marginTop: 10,
+    marginTop: 8,
+  },
+  recentStoryCard: {
+    width: screenWidth * 0.6,
+    backgroundColor: Colors.cardBackground,
+    borderRadius: 15,
+    overflow: 'hidden',
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    elevation: 5,
+  },
+  recentStoryImage: {
+    width: '100%',
+    height: 120,
+    resizeMode: 'cover',
+  },
+  recentStoryInfo: {
+    padding: 12,
+  },
+  recentStoryTitle: {
+    fontSize: 16,
+    fontFamily: Fonts.subheading,
+    color: Colors.textPrimary,
+    marginBottom: 5,
+  },
+  recentStoryAuthor: {
+    fontSize: 12,
+    fontFamily: Fonts.body,
+    color: Colors.textSecondary,
+    marginBottom: 8,
+  },
+  categoryPillSmall: {
+    backgroundColor: Colors.secondaryAccent,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    alignSelf: 'flex-start',
   },
   storiesList: {
+    paddingHorizontal: 15,
     paddingBottom: 20,
   },
   storyCard: {
     backgroundColor: Colors.cardBackground,
     borderRadius: 15,
-    padding: 20,
-    marginBottom: 20,
+    padding: 15,
+    marginBottom: 15,
     shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.2,
     shadowRadius: 5,
-    elevation: 6,
+    elevation: 5,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -1566,22 +1795,20 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: Colors.border,
+    marginRight: 10,
   },
   cardAuthorInfo: {
-    marginLeft: 10,
     flex: 1,
   },
   cardAuthorName: {
     fontSize: 16,
-    fontWeight: '600',
-    color: Colors.textPrimary,
     fontFamily: Fonts.subheading,
+    color: Colors.textPrimary,
   },
   cardDate: {
     fontSize: 12,
-    color: Colors.textSecondary,
     fontFamily: Fonts.body,
+    color: Colors.textSecondary,
   },
   bookmarkButton: {
     padding: 5,
@@ -1591,50 +1818,50 @@ const styles = StyleSheet.create({
   },
   storyTitle: {
     fontSize: 20,
-    fontWeight: '700',
-    color: Colors.textPrimary,
     fontFamily: Fonts.heading,
+    color: Colors.textPrimary,
     marginBottom: 8,
   },
   storyImage: {
     width: '100%',
-    height: 200,
+    height: 180,
     borderRadius: 10,
     marginBottom: 10,
-    backgroundColor: Colors.border,
+    resizeMode: 'cover',
   },
   storyExcerpt: {
     fontSize: 14,
-    color: Colors.textSecondary,
     fontFamily: Fonts.body,
+    color: Colors.textSecondary,
     lineHeight: 20,
-    marginBottom: 5,
   },
   readMoreText: {
     fontSize: 14,
-    color: Colors.primaryAccent,
     fontFamily: Fonts.button,
-    fontWeight: '600',
-    alignSelf: 'flex-start',
+    color: Colors.primaryAccent,
+    marginTop: 5,
+    alignSelf: 'flex-end',
   },
   storyFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    paddingTop: 10,
   },
   categoryPill: {
     backgroundColor: Colors.secondaryAccent,
     borderRadius: 15,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     alignSelf: 'flex-start',
   },
   categoryText: {
     fontSize: 12,
-    color: Colors.textPrimary,
     fontFamily: Fonts.body,
-    fontWeight: '600',
+    color: Colors.textPrimary,
   },
   interactionButtons: {
     flexDirection: 'row',
@@ -1646,174 +1873,173 @@ const styles = StyleSheet.create({
   },
   interactionCount: {
     fontSize: 14,
+    fontFamily: Fonts.body,
     color: Colors.textSecondary,
     marginLeft: 5,
-    fontFamily: Fonts.body,
   },
   storyDetailContainer: {
     flex: 1,
     backgroundColor: Colors.background,
   },
   detailScrollContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 120,
+    paddingBottom: 100,
   },
   detailHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 10,
-    marginBottom: 20,
+    padding: 15,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 15 : 15,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    backgroundColor: Colors.cardBackground,
   },
   backButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 5,
   },
   backButtonText: {
     color: Colors.primaryAccent,
-    fontSize: 16,
-    marginLeft: 5,
+    fontSize: 18,
     fontFamily: Fonts.button,
+    marginLeft: 5,
   },
   storyActions: {
     flexDirection: 'row',
+    gap: 10,
   },
   storyActionButton: {
-    marginLeft: 15,
     padding: 5,
   },
   detailTitle: {
-    fontSize: 30,
-    fontWeight: '700',
-    color: Colors.textPrimary,
+    fontSize: 26,
     fontFamily: Fonts.heading,
-    marginBottom: 15,
-    textAlign: 'center',
+    color: Colors.textPrimary,
+    padding: 15,
+    paddingBottom: 0,
+    lineHeight: 34,
   },
   detailAuthor: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
+    padding: 15,
+    paddingTop: 10,
   },
   detailAuthorImage: {
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: Colors.border,
     marginRight: 10,
   },
   detailAuthorName: {
     fontSize: 18,
-    fontWeight: '600',
-    color: Colors.textPrimary,
     fontFamily: Fonts.subheading,
+    color: Colors.textPrimary,
   },
   detailDate: {
     fontSize: 14,
-    color: Colors.textSecondary,
     fontFamily: Fonts.body,
+    color: Colors.textSecondary,
   },
   detailImage: {
     width: '100%',
     height: 250,
-    borderRadius: 15,
+    resizeMode: 'cover',
     marginBottom: 20,
-    backgroundColor: Colors.border,
   },
   detailContent: {
     fontSize: 16,
-    color: Colors.textPrimary,
     fontFamily: Fonts.body,
-    lineHeight: 26,
-    marginBottom: 30,
-    textAlign: 'justify',
-  },
-  detailFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 10,
+    color: Colors.textSecondary,
+    paddingHorizontal: 15,
+    lineHeight: 24,
+    marginBottom: 20,
   },
   commentSection: {
-    marginTop: 20,
+    padding: 15,
+    backgroundColor: Colors.cardBackground,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
-    paddingTop: 20,
+    marginTop: 20,
   },
   commentsTitle: {
     fontSize: 20,
-    fontWeight: '600',
-    color: Colors.textPrimary,
     fontFamily: Fonts.subheading,
+    color: Colors.textPrimary,
     marginBottom: 15,
   },
   comment: {
-    backgroundColor: Colors.cardBackground,
-    borderRadius: 10,
+    backgroundColor: Colors.background,
     padding: 12,
+    borderRadius: 10,
     marginBottom: 10,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    flexWrap: 'wrap',
+    position: 'relative',
   },
-  commentUser: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.primaryAccent,
-    fontFamily: Fonts.subheading,
-    marginRight: 8,
-  },
-  commentContent: {
-    fontSize: 14,
-    color: Colors.textPrimary,
-    fontFamily: Fonts.body,
-    flexShrink: 1,
-  },
-  deleteCommentButton: {
-    marginLeft: 'auto',
-    paddingLeft: 10,
-  },
-  commentInputContainer: {
+  commentUserContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 15,
-    backgroundColor: Colors.cardBackground,
-    borderRadius: 25,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    marginBottom: 5,
   },
   commentUserImage: {
     width: 30,
     height: 30,
     borderRadius: 15,
-    marginRight: 10,
-    backgroundColor: Colors.border,
+    marginRight: 8,
+  },
+  commentUser: {
+    fontSize: 14,
+    fontFamily: Fonts.subheading,
+    color: Colors.primaryAccent,
+  },
+  commentContent: {
+    fontSize: 14,
+    fontFamily: Fonts.body,
+    color: Colors.textSecondary,
+    marginLeft: 38, // Align with user image
+  },
+  deleteCommentButton: {
+    position: 'absolute',
+    right: 10,
+    top: 10,
+    padding: 5,
+  },
+  commentInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+    backgroundColor: Colors.background,
+    borderRadius: 25,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
   },
   commentInput: {
     flex: 1,
     color: Colors.textPrimary,
     fontFamily: Fonts.body,
-    fontSize: 15,
+    fontSize: 14,
+    maxHeight: 100,
     paddingVertical: 8,
   },
   commentButton: {
     padding: 8,
+    marginLeft: 5,
+  },
+  exploreScrollContent: {
+    paddingBottom: 100,
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Colors.cardBackground,
     borderRadius: 25,
+    margin: 15,
     paddingHorizontal: 15,
-    paddingVertical: 8,
-    marginBottom: 25,
-    marginTop: 20,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    paddingVertical: 5,
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
   },
   searchIcon: {
     marginRight: 10,
@@ -1823,6 +2049,7 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     fontFamily: Fonts.body,
     fontSize: 16,
+    paddingVertical: 8,
   },
   clearSearchButton: {
     marginLeft: 10,
@@ -1830,62 +2057,55 @@ const styles = StyleSheet.create({
   categoryGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    marginBottom: 30,
+    justifyContent: 'flex-start',
+    paddingHorizontal: 15,
+    marginBottom: 20,
   },
   categoryGridItem: {
-    width: '48%',
-    backgroundColor: Colors.cardBackground,
-    borderRadius: 15,
-    padding: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 15,
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    elevation: 5,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    backgroundColor: Colors.secondaryAccent,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    margin: 5,
+  },
+  categoryGridItemActive: {
+    backgroundColor: Colors.primaryAccent,
   },
   categoryGridText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.primaryAccent,
-    fontFamily: Fonts.subheading,
-    textAlign: 'center',
+    color: Colors.textPrimary,
+    fontFamily: Fonts.body,
+    fontSize: 14,
+  },
+  writeScrollContent: {
+    padding: 20,
+    paddingBottom: 100,
   },
   input: {
     backgroundColor: Colors.cardBackground,
-    borderRadius: 12,
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    fontSize: 16,
+    borderRadius: 10,
+    padding: 15,
     color: Colors.textPrimary,
     fontFamily: Fonts.body,
+    fontSize: 16,
     marginBottom: 15,
     borderWidth: 1,
     borderColor: Colors.border,
   },
   textArea: {
-    minHeight: 120,
+    minHeight: 200,
     textAlignVertical: 'top',
-    paddingTop: 15,
-    paddingBottom: 15,
   },
   pickerContainer: {
     backgroundColor: Colors.cardBackground,
-    borderRadius: 12,
+    borderRadius: 10,
     marginBottom: 15,
     borderWidth: 1,
     borderColor: Colors.border,
     overflow: 'hidden',
   },
   picker: {
-    color: Colors.textPrimary,
     height: 50,
-    width: '100%',
+    color: Colors.textPrimary,
   },
   pickerItem: {
     color: Colors.textPrimary,
@@ -1896,216 +2116,190 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Colors.cardBackground,
-    borderRadius: 12,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    marginBottom: 10,
+    borderRadius: 10,
+    padding: 15,
+    marginBottom: 15,
     borderWidth: 1,
     borderColor: Colors.border,
   },
   mediaUploadButtonText: {
-    color: Colors.textPrimary,
-    marginLeft: 10,
+    color: Colors.primaryAccent,
+    fontFamily: Fonts.button,
     fontSize: 16,
-    fontFamily: Fonts.body,
+    marginLeft: 10,
   },
   selectedMediaText: {
-    fontSize: 12,
     color: Colors.textSecondary,
     fontFamily: Fonts.body,
-    marginLeft: 15,
-    marginBottom: 10,
+    fontSize: 12,
+    marginBottom: 15,
+    marginLeft: 5,
   },
   submitButton: {
-    borderRadius: 25,
-    paddingVertical: 15,
-    alignItems: 'center',
+    borderRadius: 10,
+    overflow: 'hidden',
     marginTop: 20,
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-    elevation: 6,
   },
   submitButtonGradient: {
-    borderRadius: 25,
     paddingVertical: 15,
     alignItems: 'center',
-    width: '100%',
+    justifyContent: 'center',
   },
   submitButtonText: {
     color: Colors.textPrimary,
-    fontSize: 18,
-    fontWeight: '700',
     fontFamily: Fonts.button,
+    fontSize: 18,
   },
   cancelButton: {
     marginTop: 10,
-    paddingVertical: 10,
+    padding: 10,
     alignItems: 'center',
   },
   cancelButtonText: {
     color: Colors.textSecondary,
-    fontSize: 16,
     fontFamily: Fonts.button,
+    fontSize: 16,
+  },
+  validationErrorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(207, 42, 39, 0.1)',
+    padding: 10,
+    borderRadius: 5,
+    marginBottom: 15,
   },
   validationErrorText: {
     color: Colors.error,
-    fontSize: 14,
     fontFamily: Fonts.body,
-    marginBottom: 10,
-    textAlign: 'center',
+    fontSize: 14,
+    marginLeft: 5,
+  },
+  libraryScrollContent: {
+    paddingBottom: 100,
+  },
+  profileScrollContent: {
+    paddingBottom: 100,
   },
   profileContainer: {
     alignItems: 'center',
+    padding: 20,
     backgroundColor: Colors.cardBackground,
-    borderRadius: 20,
-    padding: 25,
-    marginTop: 30,
-    width: '100%',
+    borderRadius: 15,
+    margin: 15,
     shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 5 },
+    shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 8,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    shadowRadius: 5,
+    elevation: 5,
+  },
+  profileImageContainer: {
+    position: 'relative',
+    marginBottom: 15,
+  },
+  profileImage: {
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    borderWidth: 3,
+    borderColor: Colors.primaryAccent,
+  },
+  editImageButton: {
+    position: 'absolute',
+    bottom: 10,
+    right: 10,
+    backgroundColor: Colors.primaryAccent,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   profileName: {
-    fontSize: 26,
-    fontWeight: '700',
-    color: Colors.textPrimary,
+    fontSize: 24,
     fontFamily: Fonts.heading,
+    color: Colors.textPrimary,
     marginBottom: 5,
+  },
+  profileEmailContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
   },
   profileEmail: {
     fontSize: 16,
-    color: Colors.textSecondary,
     fontFamily: Fonts.body,
-    marginBottom: 15,
+    color: Colors.textSecondary,
+    marginLeft: 5,
   },
   profileStats: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     width: '100%',
-    marginBottom: 25,
+    marginBottom: 20,
   },
   statItem: {
     alignItems: 'center',
+    paddingHorizontal: 10,
   },
   statNumber: {
-    fontSize: 24,
-    fontWeight: '700',
+    fontSize: 20,
+    fontFamily: Fonts.subheading,
     color: Colors.primaryAccent,
-    fontFamily: Fonts.heading,
   },
   statLabel: {
     fontSize: 14,
-    color: Colors.textSecondary,
     fontFamily: Fonts.body,
+    color: Colors.textSecondary,
+    marginTop: 5,
   },
   editProfileButton: {
-    borderRadius: 20,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: '80%',
+    borderRadius: 10,
+    overflow: 'hidden',
+    marginTop: 10,
   },
   editProfileButtonGradient: {
-    borderRadius: 20,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 12,
   },
   editProfileButtonText: {
     color: Colors.textPrimary,
-    fontSize: 16,
-    fontWeight: '700',
     fontFamily: Fonts.button,
+    fontSize: 16,
     marginLeft: 8,
   },
-  modalContainer: {
+  modalOverlay: {
     flex: 1,
-    backgroundColor: Colors.background,
-    padding: 24,
-    paddingTop: Platform.OS === 'android' ? 40 : 60,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: Colors.overlay,
+  },
+  modalContainer: {
+    width: '90%',
+    backgroundColor: Colors.cardBackground,
+    borderRadius: 15,
+    overflow: 'hidden',
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 35,
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  modalCloseButton: {
+    padding: 5,
   },
   modalTitle: {
-    color: Colors.textPrimary,
-    fontSize: 28,
-    fontWeight: '700',
+    fontSize: 24,
     fontFamily: Fonts.heading,
-    marginBottom: 20
-  },
-  settingsButtonText: {
     color: Colors.textPrimary,
-    fontSize: 18,
-    fontFamily: Fonts.button,
-    fontWeight: '600',
   },
-  settingsActionButton: {
-    borderRadius: 20,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 10,
-    width: '100%',
-  },
-  settingsActionButtonGradient: {
-    borderRadius: 20,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-  },
-  settingsActionButtonText: {
-    color: Colors.textPrimary,
-    fontSize: 16,
-    fontWeight: '700',
-    fontFamily: Fonts.button,
-  },
-  settingsFooter: {
-    marginTop: 'auto',
-    paddingBottom: 20,
-  },
-  navbar: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    paddingVertical: 20,
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: Colors.cardBackground,
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: -5 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 12,
-  },
-  navItem: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  navText: {
-    fontSize: 13,
-    fontFamily: Fonts.body,
-    marginTop: 5,
+  modalContent: {
+    padding: 20,
   },
   emptyState: {
     flex: 1,
@@ -2137,25 +2331,46 @@ const styles = StyleSheet.create({
   createButtonEmpty: {
     marginTop: 20,
     backgroundColor: Colors.primaryAccent,
-    borderRadius: 20,
+    borderRadius: 10,
     paddingVertical: 12,
     paddingHorizontal: 20,
   },
   createButtonTextEmpty: {
     color: Colors.textPrimary,
-    fontSize: 16,
-    fontWeight: '600',
     fontFamily: Fonts.button,
+    fontSize: 16,
+  },
+  navbar: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    backgroundColor: Colors.cardBackground,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: -5 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  navItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  navText: {
+    fontSize: 12,
+    fontFamily: Fonts.body,
+    marginTop: 5,
+  },
+  loading: {
+    marginVertical: 20,
   },
   errorText: {
     color: Colors.error,
-    fontSize: 16,
     fontFamily: Fonts.body,
+    fontSize: 16,
     textAlign: 'center',
     marginVertical: 20,
-  },
-  loading: {
-    marginVertical: 50,
   },
 });
 

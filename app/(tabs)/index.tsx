@@ -5,158 +5,218 @@ import {
   TouchableOpacity,
   StyleSheet,
   StatusBar,
-  Image,
   Dimensions,
   ActivityIndicator,
+  Platform,
+  Image,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@clerk/clerk-expo';
 import { router } from 'expo-router';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 
 const { width, height } = Dimensions.get('window');
 
+// Consistent with Home.tsx
+const Colors = {
+  background: '#0D0D0D',
+  cardBackground: '#1C1C1C',
+  primaryAccent: '#8B6F47',
+  secondaryAccent: '#6B4E31',
+  textPrimary: '#F5F5F5',
+  textSecondary: '#B0B0B0',
+  border: '#404040',
+  error: '#CF2A27',
+  success: '#00C4B4',
+  shadow: 'rgba(0,0,0,0.5)',
+  like: '#ff0770',
+};
+
+const Fonts = {
+  heading: Platform.OS === 'ios' ? 'PlayfairDisplay-Bold' : 'serif',
+  subheading: Platform.OS === 'ios' ? 'Inter-SemiBold' : 'sans-serif-medium',
+  body: Platform.OS === 'ios' ? 'Inter-Regular' : 'sans-serif',
+  button: Platform.OS === 'ios' ? 'Inter-Bold' : 'sans-serif',
+};
+
 const GetStartedScreen = () => {
   const { isSignedIn, isLoaded } = useAuth();
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     if (!isLoaded) return;
-    console.log('Auth Status:', { isLoaded, isSignedIn });
-    try {
-      if (isSignedIn) {
-        console.log('Redirecting to /Home');
-        router.replace('/Home');
-      }
-    } catch (error) {
-      console.error('Redirect Error:', error);
+    if (isSignedIn) {
+      router.replace('/Home');
     }
   }, [isSignedIn, isLoaded]);
+
+  useEffect(() => {
+    StatusBar.setHidden(false);
+    StatusBar.setBarStyle('light-content');
+    StatusBar.setBackgroundColor(Colors.background);
+  }, [insets]);
 
   if (!isLoaded) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#FF8000" />
-        <Text style={styles.loadingText}>Loading...</Text>
+        <ActivityIndicator size="large" color={Colors.primaryAccent} />
+        <Text style={styles.loadingText}>Loading application...</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <StatusBar hidden />
-      <Image
-        style={styles.logo}
-        source={require('../../assets/images/Devtales.png')}
-        resizeMode="contain"
-      />
-      <Text style={styles.title}>Welcome to</Text>
-      <Text style={styles.slogan}>"Legends of Bharat, Retold."</Text>
-
-      <Image
-        style={styles.thought}
-        source={require('../../assets/images/thought.png')}
-        resizeMode="contain"
-      />
-      <Image
-        style={styles.avtarImage}
-        source={require('../../assets/images/avtar-removebg.png')}
-        resizeMode="contain"
-      />
-
-      <TouchableOpacity
-        style={styles.getStartedBtn}
-        onPress={() => {
-          console.log('Navigating to /auth');
-          router.replace('/auth');
-        }}
+    <SafeAreaView style={styles.container}>
+      <LinearGradient
+        colors={[Colors.background, Colors.cardBackground]}
+        style={styles.backgroundGradient}
       >
-        <LinearGradient
-          colors={['#FF8000', '#9ECA6F']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={styles.gradient}
-        >
-          <Text style={styles.getStartedText}>Get Started</Text>
-        </LinearGradient>
-      </TouchableOpacity>
-    </View>
+        <View style={styles.contentContainer}>
+          <View style={styles.header}>
+            {/* <Text style={styles.headerTitle}>DevTales</Text> */}
+            <Image
+              source={require('../../assets/images/Devtales.png')}
+              style={[styles.headerTitle]}
+              
+              />
+          </View>
+
+          <View style={styles.welcomeCard}>
+            <Text style={styles.welcomeText}>Welcome to</Text>
+            <Text style={styles.appName}>DevTales</Text>
+            <Text style={styles.tagline}>Legends of Bharat, Retold</Text>
+            <View style={styles.divider} />
+            <Text style={styles.description}>
+              Discover and share timeless stories from Indian mythology, epics, and folklore.
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.footer}>
+          <TouchableOpacity
+            style={styles.getStartedButton}
+            onPress={() => router.replace('/Home')}
+          >
+            <LinearGradient
+              colors={[Colors.primaryAccent, Colors.secondaryAccent]}
+              style={styles.buttonGradient}
+            >
+              <Text style={styles.buttonText}>Get Started</Text>
+              <Ionicons name="arrow-forward" size={24} color={Colors.textPrimary} />
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+      </LinearGradient>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: Colors.background,
+  },
+  backgroundGradient: {
+    flex: 1,
+    paddingBottom: 20,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#000',
+    backgroundColor: Colors.background,
   },
   loadingText: {
-    color: '#FF8000',
-    fontSize: 18,
-    fontWeight: '600',
+    color: Colors.textPrimary,
     marginTop: 10,
+    fontSize: 16,
+    fontFamily: Fonts.body,
   },
-  logo: {
-    height: height * 0.15,
-    width: height * 0.15,
-    position: 'absolute',
-    top: height * 0.045,
-    right: width * 0.05,
+  contentContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 20,
   },
-  title: {
-    color: '#fff',
-    position: 'absolute',
-    top: height * 0.07,
-    left: width * 0.04,
-    fontSize: height * 0.034,
-    fontWeight: '900',
+  header: {
+    flexDirection: 'row',
+    
+    
+    marginBottom: 40,
+    paddingHorizontal: 15,
+     width: 160, 
+    height: 160,
+    borderRadius: 80, 
+    borderWidth: 2,   
+    borderColor: Colors.secondaryAccent, 
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  slogan: {
-    color: '#fff',
-    position: 'absolute',
-    top: height * 0.14,
-    left: width * 0.08,
-    fontSize: height * 0.014,
+  headerTitle: {
+  width: 150,
+  height: 150,
+  borderRadius: 75, 
+  },
+  welcomeCard: {
+    backgroundColor: Colors.cardBackground,
+    borderRadius: 15,
+    padding: 25,
+    marginHorizontal: 15,
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  welcomeText: {
+    fontSize: 20,
+    fontFamily: Fonts.subheading,
+    color: Colors.textSecondary,
+    marginBottom: 5,
+  },
+  appName: {
+    fontSize: 32,
+    fontFamily: Fonts.heading,
+    color: Colors.textPrimary,
+    marginBottom: 10,
+  },
+  tagline: {
+    fontSize: 18,
+    fontFamily: Fonts.subheading,
+    color: Colors.primaryAccent,
     fontStyle: 'italic',
-    fontWeight: '600',
+    marginBottom: 15,
   },
-  thought: {
-    height: height * 0.35,
-    width: width * 0.75,
-    position: 'absolute',
-    top: height * 0.37,
+  divider: {
+    height: 1,
+    backgroundColor: Colors.border,
+    marginVertical: 15,
   },
-  avtarImage: {
-    height: height * 0.35,
-    width: height * 0.35,
-    position: 'absolute',
-    bottom: height * 0.1,
+  description: {
+    fontSize: 16,
+    fontFamily: Fonts.body,
+    color: Colors.textSecondary,
+    lineHeight: 24,
   },
-  getStartedBtn: {
-    position: 'absolute',
-    bottom: height * 0.05,
-    width: width * 0.85,
-    height: height * 0.065,
+  footer: {
+    paddingHorizontal: 20,
+  },
+  getStartedButton: {
     borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
+    overflow: 'hidden',
+    marginHorizontal: 15,
   },
-  gradient: {
-    height: '100%',
-    width: '100%',
-    borderRadius: 10,
-    justifyContent: 'center',
+  buttonGradient: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
   },
-  getStartedText: {
-    color: '#fff',
-    fontWeight: '800',
-    fontSize: height * 0.025,
+  buttonText: {
+    color: Colors.textPrimary,
+    fontFamily: Fonts.button,
+    fontSize: 18,
+    marginRight: 10,
   },
 });
 

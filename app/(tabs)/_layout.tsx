@@ -1,7 +1,9 @@
 import { Tabs } from 'expo-router';
+import { ThemeProvider } from './ThemeContext';
 
 export default function TabLayout() {
   return (
+    <ThemeProvider>
     <Tabs
       screenOptions={{ headerShown: false, tabBarStyle: { display: 'none' } }}
       initialRouteName="index"
@@ -10,5 +12,6 @@ export default function TabLayout() {
       <Tabs.Screen name="auth" />
       <Tabs.Screen name="Home" />
     </Tabs>
+    </ThemeProvider>
   );
 }

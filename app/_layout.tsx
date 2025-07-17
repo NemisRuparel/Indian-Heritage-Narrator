@@ -1,3 +1,6 @@
+import { enableScreens } from 'react-native-screens';
+enableScreens();
+
 import { ClerkProvider } from '@clerk/clerk-expo';
 import * as SecureStore from 'expo-secure-store';
 import { Slot } from 'expo-router';

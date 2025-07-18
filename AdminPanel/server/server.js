@@ -9,12 +9,11 @@ const { createClerkClient } = require('@clerk/backend');
 const app = express();
 const PORT = 4000;
 
-// Hardcoded sensitive keys (replace with environment variables in production)
-const MONGODB_URI = 'mongodb+srv://nemisruparel:ELK4zia2yGorsiEb@cluster0.zgjr7rz.mongodb.net/storyteller';
-const IMAGEKIT_PUBLIC_KEY = 'public_91WUYHoQ4XXJ7TIs7FCosvRXroM=';
-const IMAGEKIT_PRIVATE_KEY = 'private_uiNov/oTnpsySa+Bkj2VrCtx9U4=';
-const IMAGEKIT_URL_ENDPOINT = 'https://ik.imagekit.io/zjdsj3kph';
-const CLERK_SECRET_KEY = 'sk_test_4armQdQMTrBSVmfhTLqDAhfMaLaG0mFQG5oyuXlzBA'; // Replace with your Clerk Secret Key (starts with sk_)
+const MONGODB_URI = 'process.env.mongodb_uri';
+const IMAGEKIT_PUBLIC_KEY = 'process.env.imagekit_public_key';
+const IMAGEKIT_PRIVATE_KEY = 'process.env.imagekit_private_key';
+const IMAGEKIT_URL_ENDPOINT = 'process.env.imagekit_url_endpoint';
+const CLERK_SECRET_KEY = 'process.env.clerk_secret_key'; // Replace with your Clerk Secret Key (starts with sk_)
 
 app.use(cors({
   origin: ['http://localhost:3000','http://127.0.0.1:5500'],
